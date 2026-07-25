@@ -243,9 +243,6 @@ export function App() {
           <div className="absolute top-0 left-0 right-0 h-1.5 bg-[#0066FF]" />
 
           <div className="text-center max-w-xl mx-auto mb-6 pt-1">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#E6F0FF] text-[#0066FF] mb-3 border border-[#BFDBFE]">
-              <Sparkles className="w-3.5 h-3.5 text-[#0066FF]" /> Consulta de Estado de Cuenta
-            </span>
             <h2 className="font-heading font-extrabold text-2xl sm:text-3xl text-[#0A192F] mb-2 leading-tight">
               Consulta tu Historial de Crédito
             </h2>
