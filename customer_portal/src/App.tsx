@@ -192,7 +192,7 @@ export function App() {
       </header>
 
       {/* Main Content Container */}
-      <main className="max-w-4xl mx-auto px-4 py-8 w-full flex-grow">
+      <main className="max-w-4xl mx-auto px-4 py-8 w-full grow">
         {/* Banner de Bienvenida y Formulario de Búsqueda */}
         <div className="glass-card rounded-2xl p-6 sm:p-8 mb-8 border border-slate-200 shadow-xl">
           <div className="text-center max-w-xl mx-auto mb-6">
@@ -278,7 +278,7 @@ export function App() {
 
           {errorMsg && (
             <div className="mt-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs font-semibold rounded-xl flex items-center gap-2 max-w-2xl mx-auto">
-              <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+              <AlertTriangle className="w-4 h-4 shrink-0" />
               <span>{errorMsg}</span>
             </div>
           )}
@@ -501,7 +501,7 @@ export function App() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-4 bg-slate-950 flex items-center justify-center min-h-[300px] max-h-[75vh] overflow-auto">
+            <div className="p-4 bg-slate-950 flex items-center justify-center min-h-75 max-h-[75vh] overflow-auto">
               <img
                 src={selectedImage.url}
                 alt="Comprobante de Pago"
