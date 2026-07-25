@@ -272,7 +272,7 @@ export function App() {
               <select
                 value={docType}
                 onChange={(e) => setDocType(e.target.value)}
-                className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-3 text-sm font-semibold text-[#0A192F] focus:outline-none focus:ring-2 focus:ring-[#0066FF] focus:border-[#0066FF] shadow-xs cursor-pointer min-h-[48px]"
+                className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-3 text-sm font-semibold text-[#0A192F] focus:outline-none focus:ring-2 focus:ring-[#0066FF] focus:border-[#0066FF] shadow-xs cursor-pointer min-h-12"
               >
                 <option value="CC">Cédula Ciudadanía (CC)</option>
                 <option value="CE">Cédula Extranjería (CE)</option>
@@ -293,7 +293,7 @@ export function App() {
                   placeholder="Ej: 1107858381"
                   value={docId}
                   onChange={(e) => setDocId(e.target.value)}
-                  className="w-full bg-white border border-slate-300 rounded-xl pl-4 pr-10 py-3 text-sm font-semibold text-[#0A192F] placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0066FF] focus:border-[#0066FF] shadow-xs min-h-[48px]"
+                  className="w-full bg-white border border-slate-300 rounded-xl pl-4 pr-10 py-3 text-sm font-semibold text-[#0A192F] placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0066FF] focus:border-[#0066FF] shadow-xs min-h-12"
                 />
                 {docId && (
                   <button
@@ -312,7 +312,7 @@ export function App() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full sm:w-auto bg-[#0066FF] hover:bg-[#0052CC] text-white font-bold px-6 py-3 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-lg shadow-blue-200 active:scale-95 disabled:opacity-50 min-h-[48px] cursor-pointer"
+                className="w-full sm:w-auto bg-[#0066FF] hover:bg-[#0052CC] text-white font-bold px-6 py-3 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-lg shadow-blue-200 active:scale-95 disabled:opacity-50 min-h-12 cursor-pointer"
               >
                 {loading ? (
                   <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -478,7 +478,7 @@ export function App() {
                         </div>
                       ) : (
                         <div className="overflow-x-auto rounded-xl border border-slate-200/80">
-                          <table className="w-full text-left text-xs border-collapse min-w-[500px]">
+                          <table className="w-full text-left text-xs border-collapse min-w-125">
                             <thead>
                               <tr className="bg-[#F4F7FF] border-b border-slate-200 text-[#475569] font-bold uppercase tracking-wider">
                                 <th className="py-3 px-3.5">Cuota #</th>
@@ -564,7 +564,7 @@ export function App() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-4 bg-slate-950 flex items-center justify-center min-h-[300px] max-h-[75vh] overflow-auto">
+            <div className="p-4 bg-slate-950 flex items-center justify-center min-h-75 max-h-[75vh] overflow-auto">
               <img
                 src={selectedImage.url}
                 alt="Comprobante de Pago"
