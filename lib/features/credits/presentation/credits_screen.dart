@@ -449,19 +449,33 @@ class _NewCreditSheetState extends ConsumerState<_NewCreditSheet> {
               children: [
                 Expanded(
                   flex: 2,
-                  child: DropdownButtonFormField<String>(
-                    initialValue: _docType,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Tipo'),
-                    items: const [
-                      DropdownMenuItem(value: 'CC', child: Text('CC')),
-                      DropdownMenuItem(value: 'NIT', child: Text('NIT')),
-                      DropdownMenuItem(value: 'CE', child: Text('CE')),
-                      DropdownMenuItem(value: 'Pasaporte', child: Text('PAS')),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'TIPO',
+                        style: FontTokens.bodySmall.copyWith(
+                          color: ColorTokens.lightTextSecondary,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      DropdownButtonFormField<String>(
+                        initialValue: _docType,
+                        isExpanded: true,
+                        decoration: const InputDecoration(),
+                        items: const [
+                          DropdownMenuItem(value: 'CC', child: Text('CC')),
+                          DropdownMenuItem(value: 'NIT', child: Text('NIT')),
+                          DropdownMenuItem(value: 'CE', child: Text('CE')),
+                          DropdownMenuItem(value: 'Pasaporte', child: Text('PAS')),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) setState(() => _docType = val);
+                        },
+                      ),
                     ],
-                    onChanged: (val) {
-                      if (val != null) setState(() => _docType = val);
-                    },
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -611,19 +625,33 @@ class _NewCreditSheetState extends ConsumerState<_NewCreditSheet> {
             Row(
               children: [
                 Expanded(
-                  child: DropdownButtonFormField<String>(
-                    initialValue: _frequency,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Frecuencia de Pago'),
-                    items: const [
-                      DropdownMenuItem(value: 'semanal', child: Text('Semanal')),
-                      DropdownMenuItem(value: 'quincenal', child: Text('Quincenal')),
-                      DropdownMenuItem(value: 'mensual', child: Text('Mensual')),
-                      DropdownMenuItem(value: 'diario', child: Text('Diario')),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'FRECUENCIA DE PAGO',
+                        style: FontTokens.bodySmall.copyWith(
+                          color: ColorTokens.lightTextSecondary,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      DropdownButtonFormField<String>(
+                        initialValue: _frequency,
+                        isExpanded: true,
+                        decoration: const InputDecoration(),
+                        items: const [
+                          DropdownMenuItem(value: 'semanal', child: Text('Semanal')),
+                          DropdownMenuItem(value: 'quincenal', child: Text('Quincenal')),
+                          DropdownMenuItem(value: 'mensual', child: Text('Mensual')),
+                          DropdownMenuItem(value: 'diario', child: Text('Diario')),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) setState(() => _frequency = val);
+                        },
+                      ),
                     ],
-                    onChanged: (val) {
-                      if (val != null) setState(() => _frequency = val);
-                    },
                   ),
                 ),
                 const SizedBox(width: 12),

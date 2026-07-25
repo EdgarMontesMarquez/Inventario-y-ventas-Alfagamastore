@@ -270,19 +270,33 @@ class _NewCustomerSheetState extends State<_NewCustomerSheet> {
             children: [
               Expanded(
                 flex: 2,
-                child: DropdownButtonFormField<String>(
-                  initialValue: _docType,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Tipo Doc.'),
-                  items: const [
-                    DropdownMenuItem(value: 'CC', child: Text('CC')),
-                    DropdownMenuItem(value: 'NIT', child: Text('NIT')),
-                    DropdownMenuItem(value: 'CE', child: Text('CE')),
-                    DropdownMenuItem(value: 'Pasaporte', child: Text('Pasaporte')),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'TIPO DOC',
+                      style: FontTokens.bodySmall.copyWith(
+                        color: ColorTokens.lightTextSecondary,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    DropdownButtonFormField<String>(
+                      initialValue: _docType,
+                      isExpanded: true,
+                      decoration: const InputDecoration(),
+                      items: const [
+                        DropdownMenuItem(value: 'CC', child: Text('CC')),
+                        DropdownMenuItem(value: 'NIT', child: Text('NIT')),
+                        DropdownMenuItem(value: 'CE', child: Text('CE')),
+                        DropdownMenuItem(value: 'Pasaporte', child: Text('Pasaporte')),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) setState(() => _docType = val);
+                      },
+                    ),
                   ],
-                  onChanged: (val) {
-                    if (val != null) setState(() => _docType = val);
-                  },
                 ),
               ),
               const SizedBox(width: 8),

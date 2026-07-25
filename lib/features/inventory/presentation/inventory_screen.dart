@@ -15,6 +15,7 @@ import '../../../shared/widgets/barcode_scanner_modal.dart';
 import '../../../shared/widgets/barcode_generator_modal.dart';
 import '../../../shared/providers/repository_providers.dart';
 import '../../../shared/models/product.dart';
+import '../../../core/utils/currency_formatter.dart';
 import '../providers/category_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 
@@ -104,6 +105,15 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                               '${products.length} productos',
                               style: FontTokens.h2,
                             ),
+                            if (ref.watch(authProvider).isAdmin)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                  'Costo Total: ${CurrencyUtils.format(products.fold(0.0, (sum, p) => sum + (p.cost * p.stock)))}\n'
+                                  'Precio Total: ${CurrencyUtils.format(products.fold(0.0, (sum, p) => sum + (p.price * p.stock)))}',
+                                  style: FontTokens.bodySmall.copyWith(color: ColorTokens.statusSuccess, fontWeight: FontWeight.bold),
+                                ),
+                              ),
                           ],
                         ),
                         if (!ref.watch(authProvider).isEmpleado)
@@ -115,10 +125,11 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                           ),
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 2),
 
                     // Search Bar Input with Camera Barcode Scanner Suffix
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Expanded(
                           child: CustomTextField(
