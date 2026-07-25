@@ -12,7 +12,6 @@ import {
   MapPin, 
   MessageSquare,
   ShieldCheck,
-  Building2,
   Clock,
   Sparkles,
   ExternalLink
@@ -203,7 +202,7 @@ export function App() {
         {/* Card de Búsqueda con Banner Brand Accent */}
         <div className="glass-card rounded-2xl p-6 sm:p-8 mb-8 border border-slate-200/90 shadow-xl relative overflow-hidden">
           {/* Accent Bar Top */}
-          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-indigo-600 via-indigo-500 to-emerald-500" />
+          <div className="absolute top-0 left-0 right-0 h-1.5 bg-linear-to-r from-indigo-600 via-indigo-500 to-emerald-500" />
 
           <div className="text-center max-w-xl mx-auto mb-6 pt-2">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 mb-3 border border-indigo-100 shadow-xs">
