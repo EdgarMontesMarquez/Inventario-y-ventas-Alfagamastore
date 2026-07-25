@@ -10,6 +10,8 @@ DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 DROP FUNCTION IF EXISTS public.handle_new_sale_item();
 DROP FUNCTION IF EXISTS public.handle_new_user();
 
+DROP TABLE IF EXISTS public.cash_expenses CASCADE;
+DROP TABLE IF EXISTS public.cash_shifts CASCADE;
 DROP TABLE IF EXISTS public.credit_installments CASCADE;
 DROP TABLE IF EXISTS public.credits CASCADE;
 DROP TABLE IF EXISTS public.sale_items CASCADE;
@@ -167,6 +169,40 @@ CREATE TABLE public.credit_installments (
     receipt_image_url TEXT
 );
 
+-- 12. TABLA DE TURNOS Y ARQUEOS DE CAJA (CASH_SHIFTS)
+CREATE TABLE IF NOT EXISTS public.cash_shifts (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    user_name VARCHAR(200) NOT NULL DEFAULT 'Empleado',
+    initial_amount NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
+    cash_sales NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
+    cash_credits NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
+    total_expenses NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
+    expected_amount NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
+    actual_amount NUMERIC(12, 2),
+    difference NUMERIC(12, 2),
+    status VARCHAR(30) NOT NULL DEFAULT 'open', -- 'open' | 'closed'
+    opened_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    closed_at TIMESTAMP WITH TIME ZONE,
+    notes TEXT
+);
+
+-- 13. TABLA DE GASTOS Y EGRESOS MENORES DE CAJA (CASH_EXPENSES)
+CREATE TABLE IF NOT EXISTS public.cash_expenses (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    shift_id UUID REFERENCES public.cash_shifts(id) ON DELETE CASCADE,
+    description VARCHAR(255) NOT NULL,
+    amount NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- =======================================================
+-- ÍNDICES DE BÚSQUEDA RÁPIDA (PERFORMANCE & SEARCH)
+-- =======================================================
+CREATE INDEX IF NOT EXISTS idx_customers_doc_id ON public.customers(document_id);
+CREATE INDEX IF NOT EXISTS idx_credits_customer_id ON public.credits(customer_id);
+CREATE INDEX IF NOT EXISTS idx_credits_customer_phone ON public.credits(customer_phone);
+
 -- =======================================================
 -- TRIGGER AUTOMÁTICO: DESCONTAR INVENTARIO EN CADA VENTA
 -- =======================================================
@@ -197,7 +233,10 @@ ALTER TABLE public.sales ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sale_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.credits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.credit_installments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.cash_shifts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.cash_expenses ENABLE ROW LEVEL SECURITY;
 
+-- Políticas para usuarios autenticados del sistema ERP
 CREATE POLICY "Allow authenticated access to profiles" ON public.profiles FOR ALL USING (auth.role() = 'authenticated');
 CREATE POLICY "Allow authenticated access to store_settings" ON public.store_settings FOR ALL USING (auth.role() = 'authenticated');
 CREATE POLICY "Allow authenticated access to categories" ON public.categories FOR ALL USING (auth.role() = 'authenticated');
@@ -207,37 +246,10 @@ CREATE POLICY "Allow authenticated access to sales" ON public.sales FOR ALL USIN
 CREATE POLICY "Allow authenticated access to sale_items" ON public.sale_items FOR ALL USING (auth.role() = 'authenticated');
 CREATE POLICY "Allow authenticated access to credits" ON public.credits FOR ALL USING (auth.role() = 'authenticated');
 CREATE POLICY "Allow authenticated access to credit_installments" ON public.credit_installments FOR ALL USING (auth.role() = 'authenticated');
-
--- 12. TABLA DE TURNOS Y ARQUEOS DE CAJA (CASH_SHIFTS)
-CREATE TABLE IF NOT EXISTS public.cash_shifts (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
-    user_name VARCHAR(200) NOT NULL DEFAULT 'Empleado',
-    initial_amount NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-    cash_sales NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-    cash_credits NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-    total_expenses NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-    expected_amount NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-    actual_amount NUMERIC(12, 2),
-    difference NUMERIC(12, 2),
-    status VARCHAR(30) NOT NULL DEFAULT 'open', -- 'open' | 'closed'
-    opened_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    closed_at TIMESTAMP WITH TIME ZONE,
-    notes TEXT
-);
-
--- 13. TABLA DE GASTOS Y EGRESOS MENORES DE CAJA (CASH_EXPENSES)
-CREATE TABLE IF NOT EXISTS public.cash_expenses (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    shift_id UUID REFERENCES public.cash_shifts(id) ON DELETE CASCADE,
-    description VARCHAR(255) NOT NULL,
-    amount NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
-ALTER TABLE public.cash_shifts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.cash_expenses ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY "Allow authenticated access to cash_shifts" ON public.cash_shifts FOR ALL USING (auth.role() = 'authenticated');
 CREATE POLICY "Allow authenticated access to cash_expenses" ON public.cash_expenses FOR ALL USING (auth.role() = 'authenticated');
 
+-- POLÍTICAS PÚBLICAS DE LECTURA (Permite consultar estado de cuenta en la web sin login)
+CREATE POLICY "Allow public read access to customers" ON public.customers FOR SELECT USING (true);
+CREATE POLICY "Allow public read access to credits" ON public.credits FOR SELECT USING (true);
+CREATE POLICY "Allow public read access to credit_installments" ON public.credit_installments FOR SELECT USING (true);
