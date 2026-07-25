@@ -196,10 +196,10 @@ export function App() {
       <header className="bg-[#0A192F] text-white border-b border-slate-800 sticky top-0 z-30 shadow-md">
         <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img 
-              src="/logo.png" 
-              alt="Alfa Gama Store Logo" 
-              className="w-10 h-10 object-contain rounded-xl bg-white/10 p-1 border border-white/20 shadow-xs" 
+            <img
+              src="/logo_compact.png"
+              alt="Alfa Gama Store Logo"
+              className="w-12 h-12 object-contain rounded-xl"
             />
             <div>
               <h1 className="font-heading font-extrabold text-base sm:text-lg text-white leading-tight tracking-wide">
@@ -333,7 +333,7 @@ export function App() {
                   className="inline-flex items-center gap-2 bg-[#10B981] hover:bg-[#047857] text-white font-bold text-xs px-4 py-3 rounded-xl transition-colors shadow-md shadow-emerald-200"
                 >
                   <MessageSquare className="w-4 h-4" />
-                  <span>Soporte por WhatsApp (316 314 2258)</span>
+                  <span>Soporte por WhatsApp</span>
                 </a>
               </div>
             </div>
@@ -576,7 +576,7 @@ export function App() {
       <footer className="bg-[#0A192F] text-slate-400 text-xs py-8 border-t border-slate-800 mt-12">
         <div className="max-w-4xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2.5">
-            <img src="/logo.png" alt="Logo AlfaGama" className="w-6 h-6 object-contain bg-white/10 p-0.5 rounded-md" />
+            <img src="/logo_compact.png" alt="Logo AlfaGama" className="w-12 h-12 object-contain" />
             <span className="font-bold text-white">ALFA GAMA STORE</span>
             <span className="text-slate-500">· Moda, Calidad y Estilo</span>
           </div>
@@ -588,7 +588,7 @@ export function App() {
               className="hover:text-emerald-400 flex items-center gap-1.5 transition-colors font-semibold"
             >
               <MessageSquare className="w-4 h-4 text-[#10B981]" />
-              <span>Soporte WhatsApp: 316 314 2258</span>
+              <span>Soporte WhatsApp</span>
             </a>
           </div>
         </div>
