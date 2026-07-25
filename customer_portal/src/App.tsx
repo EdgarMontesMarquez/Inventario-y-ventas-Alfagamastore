@@ -57,12 +57,16 @@ export function App() {
     setCredits([]);
 
     try {
-      // 1. Buscar Cliente en public.customers
+      // 1. Consulta simple de clientes en public.customers (Sin joins complejos)
       let foundCustomer: Customer | null = null;
       try {
-        const { data: allCustomers } = await supabase
+        const { data: allCustomers, error: custError } = await supabase
           .from('customers')
           .select('*');
+
+        if (custError) {
+          console.warn('Advertencia en customers:', custError.message);
+        }
 
         if (allCustomers && allCustomers.length > 0) {
           const match = allCustomers.find((c: any) => {
@@ -85,16 +89,19 @@ export function App() {
           }
         }
       } catch (e) {
-        console.warn('Consulta customers:', e);
+        console.warn('Excepción consulta customers:', e);
       }
 
-      // 2. Buscar Créditos asociados en public.credits (con credit_installments)
+      // 2. Consulta simple de créditos en public.credits (Sin joins que puedan fallar en Supabase)
       const { data: allCredits, error: credErr } = await supabase
         .from('credits')
-        .select('*, credit_installments(*)');
+        .select('*');
 
       if (credErr) {
         console.error('Error cargando créditos de Supabase:', credErr);
+        setErrorMsg(`Error de conexión con la base de datos: ${credErr.message}`);
+        setLoading(false);
+        return;
       }
 
       let rawCredits: Record<string, any>[] = [];
@@ -121,44 +128,55 @@ export function App() {
         return;
       }
 
-      // 3. Procesar Créditos y Cuotas
-      const fullCredits: Credit[] = rawCredits.map((c: any) => {
-        const instList = (c.credit_installments || []).sort((a: any, b: any) => Number(a.number || 0) - Number(b.number || 0));
-        const totalAmt = Number(c.total_amount || 0);
-        const paidAmt = Number(c.paid_amount || 0);
+      // 3. Cargar Cuotas (Installments) de forma segura para cada crédito
+      const fullCredits: Credit[] = await Promise.all(
+        rawCredits.map(async (c: any) => {
+          let instList: any[] = [];
+          try {
+            const { data: instData } = await supabase
+              .from('credit_installments')
+              .select('*')
+              .eq('credit_id', c.id)
+              .order('number', { ascending: true });
+            if (instData) instList = instData;
+          } catch (_) {}
 
-        return {
-          id: String(c.id),
-          customer_id: c.customer_id ? String(c.customer_id) : undefined,
-          customer_name: c.customer_name || foundCustomer?.name || 'Cliente AlfaGama',
-          customer_phone: c.customer_phone || foundCustomer?.phone || '',
-          customer_address: c.customer_address || foundCustomer?.address || '',
-          products: c.products || 'Productos adquiridos a crédito',
-          total_amount: totalAmt,
-          paid_amount: paidAmt,
-          interest_rate: Number(c.interest_rate || 0),
-          interest_amount: Number(c.interest_amount || 0),
-          installments_count: Number(c.installments_count || (instList.length > 0 ? instList.length : 1)),
-          payment_frequency: c.payment_frequency || 'mensual',
-          status: c.status || (paidAmt >= totalAmt ? 'finalizado' : 'activo'),
-          due_date: c.due_date || new Date().toISOString(),
-          notes: c.notes,
-          created_at: c.created_at || new Date().toISOString(),
-          installments: instList.map((inst: any) => ({
-            id: String(inst.id),
-            credit_id: String(inst.credit_id),
-            number: Number(inst.number || 1),
-            amount: Number(inst.amount || 0),
-            paid_amount: Number(inst.paid_amount || 0),
-            due_date: inst.due_date,
-            is_paid: Boolean(inst.is_paid),
-            paid_at: inst.paid_at,
-            payment_method: inst.payment_method,
-            notes: inst.notes,
-            receipt_image_url: inst.receipt_image_url
-          }))
-        };
-      });
+          const totalAmt = Number(c.total_amount || 0);
+          const paidAmt = Number(c.paid_amount || 0);
+
+          return {
+            id: String(c.id),
+            customer_id: c.customer_id ? String(c.customer_id) : undefined,
+            customer_name: c.customer_name || foundCustomer?.name || 'Cliente AlfaGama',
+            customer_phone: c.customer_phone || foundCustomer?.phone || '',
+            customer_address: c.customer_address || foundCustomer?.address || '',
+            products: c.products || 'Productos adquiridos a crédito',
+            total_amount: totalAmt,
+            paid_amount: paidAmt,
+            interest_rate: Number(c.interest_rate || 0),
+            interest_amount: Number(c.interest_amount || 0),
+            installments_count: Number(c.installments_count || (instList.length > 0 ? instList.length : 1)),
+            payment_frequency: c.payment_frequency || 'mensual',
+            status: c.status || (paidAmt >= totalAmt ? 'finalizado' : 'activo'),
+            due_date: c.due_date || new Date().toISOString(),
+            notes: c.notes,
+            created_at: c.created_at || new Date().toISOString(),
+            installments: instList.map((inst: any) => ({
+              id: String(inst.id),
+              credit_id: String(inst.credit_id),
+              number: Number(inst.number || 1),
+              amount: Number(inst.amount || 0),
+              paid_amount: Number(inst.paid_amount || 0),
+              due_date: inst.due_date,
+              is_paid: Boolean(inst.is_paid),
+              paid_at: inst.paid_at,
+              payment_method: inst.payment_method,
+              notes: inst.notes,
+              receipt_image_url: inst.receipt_image_url
+            }))
+          };
+        })
+      );
 
       setCredits(fullCredits);
     } catch (err: any) {
@@ -196,10 +214,10 @@ export function App() {
       <header className="bg-[#0A192F] text-white border-b border-slate-800 sticky top-0 z-30 shadow-md">
         <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img
-              src="/logo_compact.png"
-              alt="Alfa Gama Store Logo"
-              className="w-12 h-12 object-contain rounded-xl"
+            <img 
+              src="/logo_compact.png" 
+              alt="Alfa Gama Store Logo" 
+              className="w-12 h-12 object-contain rounded-xl" 
             />
             <div>
               <h1 className="font-heading font-extrabold text-base sm:text-lg text-white leading-tight tracking-wide">
@@ -236,11 +254,13 @@ export function App() {
             </p>
           </div>
 
-          {/* Formulario de Búsqueda Móvil y Desktop */}
-          <form 
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleSearch();
+          {/* Formulario de Búsqueda Móvil y Desktop (Sin Submit HTML nativo para evitar recargas) */}
+          <div 
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleSearch();
+              }
             }}
             className="flex flex-col sm:flex-row gap-3 max-w-2xl mx-auto"
           >
@@ -287,10 +307,11 @@ export function App() {
               </div>
             </div>
 
-            {/* Botón Consultar */}
+            {/* Botón Consultar táctil */}
             <div className="sm:self-end w-full sm:w-auto">
               <button
-                type="submit"
+                type="button"
+                onClick={() => handleSearch()}
                 disabled={loading}
                 className="w-full sm:w-auto bg-[#0066FF] hover:bg-[#0052CC] text-white font-bold px-6 py-3 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-lg shadow-blue-200 active:scale-95 disabled:opacity-50 min-h-12 cursor-pointer"
               >
@@ -304,7 +325,7 @@ export function App() {
                 )}
               </button>
             </div>
-          </form>
+          </div>
 
           {errorMsg && (
             <div className="mt-4 p-3.5 bg-red-50 border border-red-200 text-red-700 text-xs font-semibold rounded-xl flex items-center gap-2 max-w-2xl mx-auto shadow-xs">
