@@ -14,7 +14,8 @@ import {
   ShieldCheck,
   Building2,
   Clock,
-  Sparkles
+  Sparkles,
+  ExternalLink
 } from 'lucide-react';
 
 export function App() {
@@ -54,31 +55,31 @@ export function App() {
     setCredits([]);
 
     try {
-      // 1. Buscar Cliente por Documento
+      // 1. Buscar Cliente por Documento en la tabla `customers`
       let foundCustomer: Customer | null = null;
-      const { data: customerData, error: custError } = await supabase
+      const { data: customersData } = await supabase
         .from('customers')
         .select('*')
-        .or(`and(document_type.eq.${typeToUse},document_id.eq.${cleanId}),document_id.eq.${cleanId},phone.eq.${cleanId}`)
-        .limit(1)
-        .maybeSingle();
+        .or(`document_id.eq.${cleanId},phone.eq.${cleanId}`)
+        .limit(1);
 
-      if (!custError && customerData) {
+      if (customersData && customersData.length > 0) {
+        const cData = customersData[0];
         foundCustomer = {
-          id: customerData.id,
-          name: customerData.name,
-          phone: customerData.phone,
-          address: customerData.address,
-          document_type: customerData.document_type || typeToUse,
-          document_id: customerData.document_id || cleanId
+          id: cData.id,
+          name: cData.name,
+          phone: cData.phone,
+          address: cData.address,
+          document_type: cData.document_type || typeToUse,
+          document_id: cData.document_id || cleanId
         };
         setCustomer(foundCustomer);
       }
 
-      // 2. Buscar Créditos del Cliente
+      // 2. Buscar Créditos (vía ID de cliente, o vía búsqueda directa en `notes` / `customer_name`)
       let creditsQuery = supabase.from('credits').select('*');
       if (foundCustomer) {
-        creditsQuery = creditsQuery.or(`customer_id.eq.${foundCustomer.id},customer_name.ilike.%${foundCustomer.name}%`);
+        creditsQuery = creditsQuery.or(`customer_id.eq.${foundCustomer.id},customer_name.ilike.%${foundCustomer.name}%,notes.ilike.%${cleanId}%`);
       } else {
         creditsQuery = creditsQuery.or(`notes.ilike.%${cleanId}%,customer_phone.eq.${cleanId}`);
       }
@@ -109,10 +110,10 @@ export function App() {
           return {
             id: c.id,
             customer_id: c.customer_id,
-            customer_name: c.customer_name || foundCustomer?.name || 'Cliente',
+            customer_name: c.customer_name || foundCustomer?.name || 'Cliente AlfaGama',
             customer_phone: c.customer_phone || foundCustomer?.phone,
             customer_address: c.customer_address || foundCustomer?.address,
-            products: c.products || 'Productos AlfaGama',
+            products: c.products || 'Productos adquiridos a crédito',
             total_amount: totalAmt,
             paid_amount: paidAmt,
             interest_rate: Number(c.interest_rate || 0),
@@ -172,42 +173,51 @@ export function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col justify-between">
-      {/* Header Bar */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
+      {/* Header Bar con Logo Oficial */}
+      <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-30 shadow-lg">
+        <div className="max-w-4xl mx-auto px-4 py-3.5 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-md shadow-indigo-200 font-heading font-extrabold text-xl">
-              α
-            </div>
+            <img 
+              src="/logo.png" 
+              alt="Alfa Gama Store Logo" 
+              className="w-10 h-10 object-contain rounded-xl bg-white/10 p-1 border border-white/20 shadow-sm" 
+            />
             <div>
-              <h1 className="font-heading font-bold text-lg text-slate-900 leading-tight">ALFA GAMA STORE</h1>
-              <p className="text-xs text-indigo-600 font-semibold tracking-wider uppercase">PORTAL DE CRÉDITOS Y PAGOS</p>
+              <h1 className="font-heading font-extrabold text-lg text-white leading-tight tracking-wide">
+                ALFA GAMA STORE
+              </h1>
+              <p className="text-[11px] text-indigo-400 font-semibold tracking-wider uppercase">
+                PORTAL DE CRÉDITOS Y ESTADO DE CUENTA
+              </p>
             </div>
           </div>
-          <div className="hidden sm:flex items-center gap-2 text-xs text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full">
-            <ShieldCheck className="w-4 h-4 text-emerald-600" />
-            <span>Consulta Segura 24/7</span>
+          <div className="hidden sm:flex items-center gap-2 text-xs text-slate-300 bg-slate-800/90 border border-slate-700/80 px-3.5 py-1.5 rounded-full shadow-inner">
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            <span className="font-medium">Consulta Directa & Segura</span>
           </div>
         </div>
       </header>
 
       {/* Main Content Container */}
       <main className="max-w-4xl mx-auto px-4 py-8 w-full grow">
-        {/* Banner de Bienvenida y Formulario de Búsqueda */}
-        <div className="glass-card rounded-2xl p-6 sm:p-8 mb-8 border border-slate-200 shadow-xl">
-          <div className="text-center max-w-xl mx-auto mb-6">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 mb-3 border border-indigo-100">
-              <Sparkles className="w-3.5 h-3.5" /> Estado de Cuenta en Tiempo Real
+        {/* Card de Búsqueda con Banner Brand Accent */}
+        <div className="glass-card rounded-2xl p-6 sm:p-8 mb-8 border border-slate-200/90 shadow-xl relative overflow-hidden">
+          {/* Accent Bar Top */}
+          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-indigo-600 via-indigo-500 to-emerald-500" />
+
+          <div className="text-center max-w-xl mx-auto mb-6 pt-2">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 mb-3 border border-indigo-100 shadow-xs">
+              <Sparkles className="w-3.5 h-3.5 text-indigo-600" /> Consulta Tu Estado de Cuenta
             </span>
             <h2 className="font-heading font-extrabold text-2xl sm:text-3xl text-slate-900 mb-2">
-              Consulta tu Historial de Crédito
+              Historial Crediticio y Abonos
             </h2>
             <p className="text-slate-500 text-sm">
-              Ingresa tu tipo y número de documento registrado para consultar saldos, fechas de pago y comprobantes.
+              Ingresa tu tipo y número de documento registrado para consultar saldos pendientes, plan de cuotas y recibos de abonos.
             </p>
           </div>
 
-          {/* Formulario */}
+          {/* Formulario de Búsqueda */}
           <form 
             onSubmit={(e) => {
               e.preventDefault();
@@ -223,7 +233,7 @@ export function App() {
               <select
                 value={docType}
                 onChange={(e) => setDocType(e.target.value)}
-                className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-3 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm"
+                className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-3 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-xs"
               >
                 <option value="CC">Cédula Ciudadanía (CC)</option>
                 <option value="CE">Cédula Extranjería (CE)</option>
@@ -243,7 +253,7 @@ export function App() {
                   placeholder="Ej: 1107858381"
                   value={docId}
                   onChange={(e) => setDocId(e.target.value)}
-                  className="w-full bg-white border border-slate-300 rounded-xl pl-4 pr-10 py-3 text-sm font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm"
+                  className="w-full bg-white border border-slate-300 rounded-xl pl-4 pr-10 py-3 text-sm font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-xs"
                 />
                 {docId && (
                   <button
@@ -257,12 +267,12 @@ export function App() {
               </div>
             </div>
 
-            {/* Botón Buscar */}
+            {/* Botón Consultar */}
             <div className="sm:self-end w-full sm:w-auto">
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 py-3 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-lg shadow-indigo-200 active:scale-95 disabled:opacity-50"
+                className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 py-3 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-lg shadow-indigo-200 active:scale-95 disabled:opacity-50 cursor-pointer"
               >
                 {loading ? (
                   <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -277,7 +287,7 @@ export function App() {
           </form>
 
           {errorMsg && (
-            <div className="mt-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs font-semibold rounded-xl flex items-center gap-2 max-w-2xl mx-auto">
+            <div className="mt-4 p-3.5 bg-red-50 border border-red-200 text-red-700 text-xs font-semibold rounded-xl flex items-center gap-2 max-w-2xl mx-auto shadow-xs">
               <AlertTriangle className="w-4 h-4 shrink-0" />
               <span>{errorMsg}</span>
             </div>
@@ -289,19 +299,30 @@ export function App() {
           credits.length === 0 ? (
             <div className="bg-white rounded-2xl p-12 text-center border border-slate-200 shadow-sm">
               <div className="w-16 h-16 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mx-auto mb-4">
-                <CreditCard className="w-8 h-8" />
+                <CreditCard className="w-8 h-8 text-slate-400" />
               </div>
-              <h3 className="font-heading font-bold text-xl text-slate-800 mb-1">Sin créditos registrados</h3>
-              <p className="text-slate-500 text-sm max-w-md mx-auto">
-                No se encontraron créditos asociados al documento <strong className="text-slate-800">{docType} {docId}</strong>. Verifica el número ingresado o comunícate con la tienda.
+              <h3 className="font-heading font-bold text-xl text-slate-800 mb-1">Sin créditos encontrados</h3>
+              <p className="text-slate-500 text-sm max-w-md mx-auto leading-relaxed">
+                No se encontraron créditos activos o finalizados asociados al número de documento <strong className="text-slate-800">{docType} {docId}</strong>.
               </p>
+              <div className="mt-6">
+                <a
+                  href="https://wa.me/573001234567"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-colors shadow-md shadow-emerald-200"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  <span>Consultar con la Tienda por WhatsApp</span>
+                </a>
+              </div>
             </div>
           ) : (
             <div className="space-y-6">
-              {/* Tarjeta de Información del Cliente */}
+              {/* Tarjeta Titular del Crédito */}
               <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                  <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider">CLIENTE TITULAR</span>
+                  <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider block mb-0.5">TITULAR REGISTRADO</span>
                   <h3 className="font-heading font-extrabold text-xl text-slate-900">
                     {customer?.name || credits[0].customer_name}
                   </h3>
@@ -325,7 +346,7 @@ export function App() {
                 </div>
               </div>
 
-              {/* Lista de Créditos del Cliente */}
+              {/* Lista de Créditos */}
               {credits.map((credit, idx) => {
                 const pendingBalance = Math.max(0, credit.total_amount - credit.paid_amount);
                 const progressPct = credit.total_amount > 0 ? Math.min(100, (credit.paid_amount / credit.total_amount) * 100) : 0;
@@ -334,26 +355,26 @@ export function App() {
 
                 return (
                   <div key={credit.id} className="bg-white rounded-2xl border border-slate-200 shadow-md overflow-hidden">
-                    {/* Encabezado del Crédito */}
+                    {/* Header Crédito */}
                     <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                       <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-heading font-bold text-lg text-slate-900">
+                        <div className="flex items-center gap-2.5 mb-1">
+                          <span className="font-heading font-extrabold text-xl text-slate-900">
                             Crédito #{credits.length - idx}
                           </span>
-                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                          <span className={`px-3 py-1 rounded-full text-xs font-extrabold ${
                             isPaidFull ? 'badge-finalizado' : isMora ? 'badge-mora' : 'badge-activo'
                           }`}>
                             {isPaidFull ? 'FINALIZADO' : isMora ? 'EN MORA' : 'AL DÍA'}
                           </span>
                         </div>
-                        <p className="text-xs text-slate-500">
+                        <p className="text-xs text-slate-500 font-medium">
                           REGISTRADO EL {formatDate(credit.created_at)} · {credit.products}
                         </p>
                       </div>
 
-                      <div className="text-right">
-                        <span className="text-xs text-slate-500 font-medium block">SALDO PENDIENTE</span>
+                      <div className="sm:text-right">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">SALDO PENDIENTE</span>
                         <span className={`font-heading font-extrabold text-2xl ${
                           pendingBalance > 0 ? 'text-indigo-600' : 'text-emerald-600'
                         }`}>
@@ -363,12 +384,12 @@ export function App() {
                     </div>
 
                     {/* Barra de Progreso de Pago */}
-                    <div className="px-6 pt-4">
-                      <div className="flex justify-between items-center text-xs font-semibold text-slate-500 mb-1.5">
-                        <span>Progreso de Pago ({progressPct.toFixed(0)}%)</span>
+                    <div className="px-6 pt-5">
+                      <div className="flex justify-between items-center text-xs font-bold text-slate-600 mb-1.5">
+                        <span>Progreso del Pago ({progressPct.toFixed(0)}%)</span>
                         <span>{formatCurrency(credit.paid_amount)} de {formatCurrency(credit.total_amount)}</span>
                       </div>
-                      <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                      <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden shadow-inner">
                         <div 
                           className={`h-full transition-all duration-500 rounded-full ${
                             isPaidFull ? 'bg-emerald-500' : 'bg-indigo-600'
@@ -379,28 +400,28 @@ export function App() {
                     </div>
 
                     {/* Resumen Métricas */}
-                    <div className="p-6 grid grid-cols-2 sm:grid-cols-4 gap-4">
-                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase block">MONTO TOTAL</span>
-                        <span className="font-heading font-bold text-base text-slate-800">{formatCurrency(credit.total_amount)}</span>
+                    <div className="p-6 grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+                      <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">MONTO TOTAL</span>
+                        <span className="font-heading font-extrabold text-base text-slate-800">{formatCurrency(credit.total_amount)}</span>
                       </div>
-                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase block">TOTAL ABONADO</span>
-                        <span className="font-heading font-bold text-base text-emerald-600">{formatCurrency(credit.paid_amount)}</span>
+                      <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">TOTAL ABONADO</span>
+                        <span className="font-heading font-extrabold text-base text-emerald-600">{formatCurrency(credit.paid_amount)}</span>
                       </div>
-                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase block">CUOTAS</span>
-                        <span className="font-heading font-bold text-base text-slate-800">{credit.installments_count} ({credit.payment_frequency})</span>
+                      <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">NÚMERO DE CUOTAS</span>
+                        <span className="font-heading font-extrabold text-base text-slate-800">{credit.installments_count} ({credit.payment_frequency})</span>
                       </div>
-                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase block">VENCIMIENTO</span>
-                        <span className="font-heading font-bold text-base text-slate-800">{formatDate(credit.due_date)}</span>
+                      <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">FECHA VENCIMIENTO</span>
+                        <span className="font-heading font-extrabold text-base text-slate-800">{formatDate(credit.due_date)}</span>
                       </div>
                     </div>
 
-                    {/* Desglose de Cuotas e Historial de Abonos */}
+                    {/* Desglose de Cuotas & Comprobantes */}
                     <div className="px-6 pb-6">
-                      <h4 className="font-heading font-bold text-sm text-slate-800 mb-3 flex items-center gap-2">
+                      <h4 className="font-heading font-bold text-sm text-slate-800 mb-3 flex items-center gap-2 border-t border-slate-100 pt-4">
                         <Clock className="w-4 h-4 text-indigo-600" />
                         Plan de Cuotas e Historial de Abonos
                       </h4>
@@ -410,48 +431,48 @@ export function App() {
                           No hay desglose de cuotas registrado para este crédito.
                         </div>
                       ) : (
-                        <div className="overflow-x-auto">
+                        <div className="overflow-x-auto rounded-xl border border-slate-200/80">
                           <table className="w-full text-left text-xs border-collapse">
                             <thead>
-                              <tr className="border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider">
-                                <th className="py-2.5 px-3">Cuota #</th>
-                                <th className="py-2.5 px-3">Vencimiento</th>
-                                <th className="py-2.5 px-3">Monto Cuota</th>
-                                <th className="py-2.5 px-3">Estado</th>
-                                <th className="py-2.5 px-3">Fecha Pago</th>
-                                <th className="py-2.5 px-3 text-right">Comprobante</th>
+                              <tr className="bg-slate-100/80 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider">
+                                <th className="py-3 px-3.5">Cuota #</th>
+                                <th className="py-3 px-3.5">Vencimiento</th>
+                                <th className="py-3 px-3.5">Monto Cuota</th>
+                                <th className="py-3 px-3.5">Estado</th>
+                                <th className="py-3 px-3.5">Fecha Pago</th>
+                                <th className="py-3 px-3.5 text-right">Comprobante</th>
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-100">
+                            <tbody className="divide-y divide-slate-100 bg-white">
                               {credit.installments.map((inst) => {
                                 const hasReceipt = Boolean(inst.receipt_image_url && inst.receipt_image_url.trim().length > 0);
 
                                 return (
                                   <tr key={inst.id} className="hover:bg-slate-50/80 transition-colors">
-                                    <td className="py-3 px-3 font-bold text-slate-800">
+                                    <td className="py-3 px-3.5 font-bold text-slate-800">
                                       Cuota #{inst.number}
                                     </td>
-                                    <td className="py-3 px-3 text-slate-600 font-medium">
+                                    <td className="py-3 px-3.5 text-slate-600 font-medium">
                                       {formatDate(inst.due_date)}
                                     </td>
-                                    <td className="py-3 px-3 font-bold text-slate-900">
+                                    <td className="py-3 px-3.5 font-extrabold text-slate-900">
                                       {formatCurrency(inst.amount)}
                                     </td>
-                                    <td className="py-3 px-3">
+                                    <td className="py-3 px-3.5">
                                       {inst.is_paid ? (
-                                        <span className="inline-flex items-center gap-1 font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 text-[11px]">
+                                        <span className="inline-flex items-center gap-1 font-extrabold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-200 text-[11px]">
                                           <CheckCircle2 className="w-3 h-3" /> Pagado
                                         </span>
                                       ) : (
-                                        <span className="inline-flex items-center gap-1 font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200 text-[11px]">
+                                        <span className="inline-flex items-center gap-1 font-extrabold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-md border border-amber-200 text-[11px]">
                                           Pendiente
                                         </span>
                                       )}
                                     </td>
-                                    <td className="py-3 px-3 text-slate-500">
+                                    <td className="py-3 px-3.5 text-slate-500 font-medium">
                                       {inst.paid_at ? formatDate(inst.paid_at) : '-'}
                                     </td>
-                                    <td className="py-3 px-3 text-right">
+                                    <td className="py-3 px-3.5 text-right">
                                       {hasReceipt ? (
                                         <button
                                           type="button"
@@ -459,7 +480,7 @@ export function App() {
                                             url: inst.receipt_image_url!.trim(),
                                             title: `Comprobante Cuota #${inst.number} - ${customer?.name || credit.customer_name}`
                                           })}
-                                          className="inline-flex items-center gap-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold px-2.5 py-1 rounded-lg transition-colors border border-indigo-200"
+                                          className="inline-flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold px-3 py-1.5 rounded-lg transition-colors border border-indigo-200 text-xs shadow-2xs cursor-pointer"
                                           title="Ver foto del comprobante de transferencia"
                                         >
                                           <Eye className="w-3.5 h-3.5" />
@@ -485,9 +506,9 @@ export function App() {
         )}
       </main>
 
-      {/* Modal de Visualización de Foto de Comprobante */}
+      {/* Modal Foto de Comprobante */}
       {selectedImage && (
-        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-2xl w-full overflow-hidden shadow-2xl animate-modal border border-slate-200">
             <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
               <h3 className="font-heading font-bold text-sm text-slate-800 truncate pr-4">
@@ -496,7 +517,7 @@ export function App() {
               <button
                 type="button"
                 onClick={() => setSelectedImage(null)}
-                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-200/50 transition-colors"
+                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-200/60 transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -506,16 +527,21 @@ export function App() {
                 src={selectedImage.url}
                 alt="Comprobante de Pago"
                 className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-md"
-                onError={(e) => {
-                  (e.target as HTMLElement).style.display = 'none';
-                }}
               />
             </div>
-            <div className="p-3 bg-slate-50 border-t border-slate-100 text-center">
+            <div className="p-3.5 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
+              <a
+                href={selectedImage.url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1"
+              >
+                <ExternalLink className="w-3.5 h-3.5" /> Abrir Imagen Completa
+              </a>
               <button
                 type="button"
                 onClick={() => setSelectedImage(null)}
-                className="bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs px-5 py-2 rounded-xl transition-colors"
+                className="bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs px-5 py-2 rounded-xl transition-colors cursor-pointer"
               >
                 Cerrar Ventana
               </button>
@@ -527,17 +553,17 @@ export function App() {
       {/* Footer & Contact Section */}
       <footer className="bg-slate-900 text-slate-400 text-xs py-8 border-t border-slate-800 mt-12">
         <div className="max-w-4xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <Building2 className="w-4 h-4 text-indigo-400" />
-            <span className="font-semibold text-slate-200">ALFA GAMA STORE</span>
-            <span>· Moda, Calidad y Estilo</span>
+          <div className="flex items-center gap-2.5">
+            <img src="/logo.png" alt="Logo AlfaGama" className="w-6 h-6 object-contain" />
+            <span className="font-bold text-slate-200">ALFA GAMA STORE</span>
+            <span className="text-slate-500">· Moda, Calidad y Estilo</span>
           </div>
           <div className="flex items-center gap-4 text-slate-300">
             <a
               href="https://wa.me/573001234567"
               target="_blank"
               rel="noreferrer"
-              className="hover:text-emerald-400 flex items-center gap-1.5 transition-colors"
+              className="hover:text-emerald-400 flex items-center gap-1.5 transition-colors font-semibold"
             >
               <MessageSquare className="w-4 h-4 text-emerald-500" />
               <span>Soporte por WhatsApp</span>
