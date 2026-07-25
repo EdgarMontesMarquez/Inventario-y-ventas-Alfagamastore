@@ -1,0 +1,99 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --alfa-bg-primary: #F4F7FF;
+    --alfa-surface-primary: #FFFFFF;
+    --alfa-brand-primary: #0066FF;
+    --alfa-brand-hover: #0052CC;
+    --alfa-text-primary: #0A192F;
+    --alfa-text-secondary: #475569;
+    --status-success: #10B981;
+    --status-warning: #F59E0B;
+    --status-danger: #EF4444;
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background-color: #F4F7FF;
+    color: #0A192F;
+    min-height: 100vh;
+  }
+
+  h1, h2, h3, h4, .font-heading {
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  }
+
+  .font-mono-finance {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+/* Alfa Design Language 2.0 Core Tokens */
+.bg-alfa-brand {
+  background-color: #0066FF;
+}
+
+.hover\:bg-alfa-brand-hover:hover {
+  background-color: #0052CC;
+}
+
+.text-alfa-brand {
+  color: #0066FF;
+}
+
+.text-alfa-dark {
+  color: #0A192F;
+}
+
+.text-alfa-muted {
+  color: #475569;
+}
+
+/* 3D Glassmorphism Cards */
+.glass-card-alfa {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 10px 30px -5px rgba(0, 102, 255, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.03);
+}
+
+.card-3d-shadow {
+  box-shadow: 0 12px 28px -6px rgba(10, 25, 47, 0.08), 0 4px 10px -2px rgba(0, 0, 0, 0.03);
+}
+
+/* Badges Semánticos Nítidos */
+.badge-al-dia {
+  background-color: #E6F7F0;
+  color: #047857;
+  border: 1px solid #A7F3D0;
+}
+
+.badge-en-mora {
+  background-color: #FEE2E2;
+  color: #B91C1C;
+  border: 1px solid #FECACA;
+}
+
+.badge-finalizado {
+  background-color: #E6F0FF;
+  color: #0066FF;
+  border: 1px solid #BFDBFE;
+}
+
+/* Animaciones suaves */
+@keyframes modalIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-modal {
+  animation: modalIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
