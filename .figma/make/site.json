@@ -1,0 +1,10 @@
+{
+  "description": "Streamline inventory management and sales tracking for businesses with an intuitive web app that enhances efficiency and boosts profitability.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
