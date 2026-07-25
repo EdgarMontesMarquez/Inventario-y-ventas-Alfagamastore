@@ -57,7 +57,7 @@ export function App() {
     setCredits([]);
 
     try {
-      // 1. Consulta simple de clientes en public.customers (Sin joins complejos)
+      // 1. Consulta simple de clientes en public.customers
       let foundCustomer: Customer | null = null;
       try {
         const { data: allCustomers, error: custError } = await supabase
@@ -73,7 +73,14 @@ export function App() {
             const doc = String(c.document_id || '').replace(/[^a-zA-Z0-9]/g, '');
             const phone = String(c.phone || '').replace(/[^a-zA-Z0-9]/g, '');
             const name = String(c.name || '').toLowerCase();
-            return doc === cleanId || doc.includes(cleanId) || phone === cleanId || phone.includes(cleanId) || name.includes(cleanId.toLowerCase());
+            return (
+              doc === cleanId || 
+              doc.includes(cleanId) || 
+              cleanId.includes(doc) || 
+              phone === cleanId || 
+              phone.includes(cleanId) || 
+              (cleanId.length >= 3 && name.includes(cleanId.toLowerCase()))
+            );
           });
 
           if (match) {
@@ -92,7 +99,7 @@ export function App() {
         console.warn('Excepción consulta customers:', e);
       }
 
-      // 2. Consulta simple de créditos en public.credits (Sin joins que puedan fallar en Supabase)
+      // 2. Consulta simple de créditos en public.credits
       const { data: allCredits, error: credErr } = await supabase
         .from('credits')
         .select('*');

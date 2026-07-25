@@ -163,6 +163,17 @@ class SupabaseCreditRepository implements CreditRepository {
       }
     } catch (_) {}
 
+    // Limpiar notas generales para evitar duplicar Documento/Interés si viene en el texto
+    String cleanNotes = credit.generalNotes;
+    if (cleanNotes.contains('Documento:')) {
+      final parts = cleanNotes.split('|');
+      if (parts.length > 2) {
+        cleanNotes = parts.sublist(2).join('|').trim();
+      } else {
+        cleanNotes = '';
+      }
+    }
+
     // 2. Registrar el crédito relacional en public.credits
     final response = await client.from('credits').insert({
       'customer_id': customerId,
@@ -178,7 +189,7 @@ class SupabaseCreditRepository implements CreditRepository {
       'payment_frequency': credit.paymentFrequency,
       'status': credit.status,
       'due_date': credit.startDate.add(Duration(days: credit.totalQuotas * 30)).toIso8601String(),
-      'notes': credit.generalNotes,
+      'notes': cleanNotes.isNotEmpty ? cleanNotes : credit.generalNotes,
     }).select().single();
 
     final creditId = response['id'].toString();
