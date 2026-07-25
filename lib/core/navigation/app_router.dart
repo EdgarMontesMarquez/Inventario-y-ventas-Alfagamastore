@@ -21,6 +21,8 @@ import '../design_system/tokens/color_tokens.dart';
 import '../../shared/providers/repository_providers.dart';
 import '../../features/auth/presentation/splash_screen.dart';
 
+import '../../features/credits/presentation/public_credit_lookup_screen.dart';
+
 final rootNavigatorKey = GlobalKey<NavigatorState>();
 final shellNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -32,7 +34,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isLoggedIn = ref.read(authProvider).isAuthenticated;
       final loc = state.matchedLocation;
 
-      if (!isLoggedIn && loc != '/login' && loc != '/splash') {
+      if (!isLoggedIn && loc != '/login' && loc != '/splash' && !loc.startsWith('/consulta-credito')) {
         return '/login';
       }
 
@@ -165,6 +167,18 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) {
           final id = state.pathParameters['id'] ?? '';
           return CreditDetailScreen(creditId: id);
+        },
+      ),
+      GoRoute(
+        parentNavigatorKey: rootNavigatorKey,
+        path: '/consulta-credito',
+        builder: (context, state) {
+          final docType = state.uri.queryParameters['doc_type'] ?? state.uri.queryParameters['tipo'];
+          final docId = state.uri.queryParameters['doc_id'] ?? state.uri.queryParameters['cedula'] ?? state.uri.queryParameters['id'];
+          return PublicCreditLookupScreen(
+            initialDocType: docType,
+            initialDocId: docId,
+          );
         },
       ),
     ],
