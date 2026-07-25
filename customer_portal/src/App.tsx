@@ -42,8 +42,9 @@ export function App() {
   }, []);
 
   const handleSearch = async (typeToUse = docType, idToUse = docId) => {
-    // Sanitización estricta de entrada: elimina espacios invisibles de teclados móviles
-    const cleanId = idToUse.replace(/[^a-zA-Z0-9]/g, '').trim();
+    const rawSearch = idToUse.trim();
+    const cleanId = rawSearch.replace(/[^a-zA-Z0-9]/g, '');
+
     if (!cleanId) {
       setErrorMsg('Por favor ingresa un número de documento válido.');
       return;
@@ -59,70 +60,60 @@ export function App() {
       // 1. Buscar Cliente en public.customers
       let foundCustomer: Customer | null = null;
       try {
-        const { data: custData } = await supabase
+        const { data: allCustomers } = await supabase
           .from('customers')
-          .select('*')
-          .or(`document_id.eq.${cleanId},phone.eq.${cleanId}`)
-          .limit(1);
+          .select('*');
 
-        if (custData && custData.length > 0) {
-          const cData = custData[0];
-          foundCustomer = {
-            id: String(cData.id),
-            name: cData.name || 'Cliente AlfaGama',
-            phone: cData.phone || '',
-            address: cData.address || '',
-            document_type: cData.document_type || typeToUse,
-            document_id: cData.document_id || cleanId
-          };
-          setCustomer(foundCustomer);
+        if (allCustomers && allCustomers.length > 0) {
+          const match = allCustomers.find((c: any) => {
+            const doc = String(c.document_id || '').replace(/[^a-zA-Z0-9]/g, '');
+            const phone = String(c.phone || '').replace(/[^a-zA-Z0-9]/g, '');
+            const name = String(c.name || '').toLowerCase();
+            return doc === cleanId || doc.includes(cleanId) || phone === cleanId || phone.includes(cleanId) || name.includes(cleanId.toLowerCase());
+          });
+
+          if (match) {
+            foundCustomer = {
+              id: String(match.id),
+              name: match.name || 'Cliente AlfaGama',
+              phone: match.phone || '',
+              address: match.address || '',
+              document_type: match.document_type || typeToUse,
+              document_id: match.document_id || cleanId
+            };
+            setCustomer(foundCustomer);
+          }
         }
       } catch (e) {
-        console.warn('Consulta en tabla customers:', e);
+        console.warn('Consulta customers:', e);
       }
 
-      // 2. Buscar Créditos asociados en public.credits
+      // 2. Buscar Créditos asociados en public.credits (con credit_installments)
+      const { data: allCredits, error: credErr } = await supabase
+        .from('credits')
+        .select('*, credit_installments(*)');
+
+      if (credErr) {
+        console.error('Error cargando créditos de Supabase:', credErr);
+      }
+
       let rawCredits: Record<string, any>[] = [];
 
-      // Estrategia A: Filtro relacional en Supabase
-      try {
-        let query = supabase.from('credits').select('*');
-        if (foundCustomer) {
-          query = query.or(`customer_id.eq.${foundCustomer.id},customer_name.ilike.%${foundCustomer.name}%,notes.ilike.%${cleanId}%`);
-        } else {
-          query = query.or(`notes.ilike.%${cleanId}%,customer_phone.eq.${cleanId},customer_name.ilike.%${cleanId}%`);
-        }
-        const { data: filteredData } = await query.order('created_at', { ascending: false });
-        if (filteredData && filteredData.length > 0) {
-          rawCredits = filteredData;
-        }
-      } catch (e) {
-        console.warn('Filtro relacional Supabase:', e);
-      }
+      if (allCredits && allCredits.length > 0) {
+        rawCredits = allCredits.filter((c: any) => {
+          const notesStr = String(c.notes || '');
+          const cleanNotes = notesStr.replace(/[^a-zA-Z0-9]/g, '');
+          const custIdStr = String(c.customer_id || '');
+          const phoneStr = String(c.customer_phone || '').replace(/[^a-zA-Z0-9]/g, '');
+          const nameStr = String(c.customer_name || '').toLowerCase();
 
-      // Estrategia B (Fallback de Resiliencia Móvil):
-      // Si la consulta directa no trajo resultados, obtiene los créditos y realiza un filtrado local exhaustivo
-      if (rawCredits.length === 0) {
-        const { data: allData } = await supabase
-          .from('credits')
-          .select('*')
-          .order('created_at', { ascending: false });
+          const matchByCustId = foundCustomer ? custIdStr === foundCustomer.id : false;
+          const matchByNotes = notesStr.includes(rawSearch) || cleanNotes.includes(cleanId) || notesStr.includes(cleanId);
+          const matchByPhone = phoneStr.includes(cleanId);
+          const matchByName = foundCustomer ? nameStr.includes(foundCustomer.name.toLowerCase()) : false;
 
-        if (allData && allData.length > 0) {
-          rawCredits = allData.filter((c: Record<string, any>) => {
-            const notesStr = String(c.notes || '').replace(/[^a-zA-Z0-9]/g, '');
-            const custIdStr = String(c.customer_id || '');
-            const phoneStr = String(c.customer_phone || '').replace(/[^a-zA-Z0-9]/g, '');
-            const nameStr = String(c.customer_name || '').toLowerCase();
-
-            return (
-              (foundCustomer && custIdStr === foundCustomer.id) ||
-              notesStr.includes(cleanId) ||
-              phoneStr.includes(cleanId) ||
-              (foundCustomer && nameStr.includes(foundCustomer.name.toLowerCase()))
-            );
-          });
-        }
+          return matchByCustId || matchByNotes || matchByPhone || matchByName;
+        });
       }
 
       if (rawCredits.length === 0) {
@@ -130,55 +121,44 @@ export function App() {
         return;
       }
 
-      // 3. Cargar Cuotas (Installments)
-      const fullCredits: Credit[] = await Promise.all(
-        rawCredits.map(async (c: Record<string, any>) => {
-          let instList: any[] = [];
-          try {
-            const { data: instData } = await supabase
-              .from('credit_installments')
-              .select('*')
-              .eq('credit_id', c.id)
-              .order('number', { ascending: true });
-            if (instData) instList = instData;
-          } catch (_) {}
+      // 3. Procesar Créditos y Cuotas
+      const fullCredits: Credit[] = rawCredits.map((c: any) => {
+        const instList = (c.credit_installments || []).sort((a: any, b: any) => Number(a.number || 0) - Number(b.number || 0));
+        const totalAmt = Number(c.total_amount || 0);
+        const paidAmt = Number(c.paid_amount || 0);
 
-          const totalAmt = Number(c.total_amount || 0);
-          const paidAmt = Number(c.paid_amount || 0);
-
-          return {
-            id: String(c.id),
-            customer_id: c.customer_id ? String(c.customer_id) : undefined,
-            customer_name: c.customer_name || foundCustomer?.name || 'Cliente AlfaGama',
-            customer_phone: c.customer_phone || foundCustomer?.phone || '',
-            customer_address: c.customer_address || foundCustomer?.address || '',
-            products: c.products || 'Productos adquiridos a crédito',
-            total_amount: totalAmt,
-            paid_amount: paidAmt,
-            interest_rate: Number(c.interest_rate || 0),
-            interest_amount: Number(c.interest_amount || 0),
-            installments_count: Number(c.installments_count || (instList.length > 0 ? instList.length : 1)),
-            payment_frequency: c.payment_frequency || 'mensual',
-            status: c.status || (paidAmt >= totalAmt ? 'finalizado' : 'activo'),
-            due_date: c.due_date || new Date().toISOString(),
-            notes: c.notes,
-            created_at: c.created_at || new Date().toISOString(),
-            installments: instList.map((inst: Record<string, any>) => ({
-              id: String(inst.id),
-              credit_id: String(inst.credit_id),
-              number: Number(inst.number || 1),
-              amount: Number(inst.amount || 0),
-              paid_amount: Number(inst.paid_amount || 0),
-              due_date: inst.due_date,
-              is_paid: Boolean(inst.is_paid),
-              paid_at: inst.paid_at,
-              payment_method: inst.payment_method,
-              notes: inst.notes,
-              receipt_image_url: inst.receipt_image_url
-            }))
-          };
-        })
-      );
+        return {
+          id: String(c.id),
+          customer_id: c.customer_id ? String(c.customer_id) : undefined,
+          customer_name: c.customer_name || foundCustomer?.name || 'Cliente AlfaGama',
+          customer_phone: c.customer_phone || foundCustomer?.phone || '',
+          customer_address: c.customer_address || foundCustomer?.address || '',
+          products: c.products || 'Productos adquiridos a crédito',
+          total_amount: totalAmt,
+          paid_amount: paidAmt,
+          interest_rate: Number(c.interest_rate || 0),
+          interest_amount: Number(c.interest_amount || 0),
+          installments_count: Number(c.installments_count || (instList.length > 0 ? instList.length : 1)),
+          payment_frequency: c.payment_frequency || 'mensual',
+          status: c.status || (paidAmt >= totalAmt ? 'finalizado' : 'activo'),
+          due_date: c.due_date || new Date().toISOString(),
+          notes: c.notes,
+          created_at: c.created_at || new Date().toISOString(),
+          installments: instList.map((inst: any) => ({
+            id: String(inst.id),
+            credit_id: String(inst.credit_id),
+            number: Number(inst.number || 1),
+            amount: Number(inst.amount || 0),
+            paid_amount: Number(inst.paid_amount || 0),
+            due_date: inst.due_date,
+            is_paid: Boolean(inst.is_paid),
+            paid_at: inst.paid_at,
+            payment_method: inst.payment_method,
+            notes: inst.notes,
+            receipt_image_url: inst.receipt_image_url
+          }))
+        };
+      });
 
       setCredits(fullCredits);
     } catch (err: any) {
