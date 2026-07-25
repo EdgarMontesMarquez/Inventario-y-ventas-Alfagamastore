@@ -65,10 +65,14 @@ class CreditDetailScreen extends ConsumerWidget {
           onRetry: () => ref.invalidate(creditsFutureProvider),
         ),
         data: (credits) {
-          final credit = credits.firstWhere(
-            (c) => c.id == creditId,
-            orElse: () => credits.first,
-          );
+          final credit = credits.where((c) => c.id == creditId).firstOrNull;
+
+          if (credit == null) {
+            return const ErrorState(
+              title: 'Crédito no encontrado',
+              message: 'El crédito solicitado no existe o fue eliminado.',
+            );
+          }
 
           final st = credit.status;
           final pct = credit.progressPercentage;

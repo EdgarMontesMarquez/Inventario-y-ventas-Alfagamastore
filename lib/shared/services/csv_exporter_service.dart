@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -73,9 +75,19 @@ class CsvExporterService {
   }
 
   static Future<void> _shareCsvFile(String csvContent, String filename) async {
+    final bytes = Uint8List.fromList(utf8.encode(csvContent));
+
+    if (kIsWeb) {
+      await Share.shareXFiles(
+        [XFile.fromData(bytes, name: filename, mimeType: 'text/csv')],
+        text: 'Exportación de datos Alfa Gama Store: $filename',
+      );
+      return;
+    }
+
     final directory = await getTemporaryDirectory();
     final file = File('${directory.path}/$filename');
-    await file.writeAsString(csvContent);
+    await file.writeAsBytes(bytes);
 
     await Share.shareXFiles(
       [XFile(file.path)],

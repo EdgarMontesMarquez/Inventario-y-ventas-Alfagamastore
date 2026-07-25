@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../shared/providers/settings_provider.dart';
@@ -25,7 +26,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
   AuthStateData build() {
     final client = Supabase.instance.client;
 
-    client.auth.onAuthStateChange.listen((data) {
+    final subscription = client.auth.onAuthStateChange.listen((data) {
       final session = data.session;
       if (session != null) {
         final nameMeta = session.user.userMetadata?['full_name'] as String?;
@@ -40,16 +41,22 @@ class AuthNotifier extends Notifier<AuthStateData> {
       }
     });
 
+    ref.onDispose(() {
+      subscription.cancel();
+    });
+
     final currentSession = client.auth.currentSession;
     if (currentSession != null) {
-      final email = currentSession.user.email ?? 'admin@alfagamastore.com';
+      final email = currentSession.user.email ?? '';
       final nameMeta = (currentSession.user.userMetadata?['full_name'] as String?) ??
-          (email.contains('@') ? email.split('@')[0] : 'Administrador');
+          (email.contains('@') ? email.split('@')[0] : 'Usuario');
+      final roleMeta = (currentSession.user.userMetadata?['role'] as String?) ?? 'empleado';
+      _loadUserProfile(currentSession.user.id, email, nameMeta);
       return AuthStateData(
         isAuthenticated: true,
         email: email,
         fullName: nameMeta,
-        userRole: 'super_admin',
+        userRole: roleMeta,
       );
     }
 
@@ -62,8 +69,8 @@ class AuthNotifier extends Notifier<AuthStateData> {
   }
 
   Future<void> _loadUserProfile(String userId, String email, [String? fallbackName]) async {
-    String fetchedRole = 'super_admin';
-    String fetchedName = fallbackName ?? (email.contains('@') ? email.split('@')[0] : 'Administrador');
+    String fetchedRole = 'empleado';
+    String fetchedName = fallbackName ?? (email.contains('@') ? email.split('@')[0] : 'Usuario');
     try {
       final profileRes = await Supabase.instance.client
           .from('profiles')
@@ -102,11 +109,12 @@ class AuthNotifier extends Notifier<AuthStateData> {
         final emailStr = res.user!.email ?? email;
         final nameMeta = (res.user!.userMetadata?['full_name'] as String?) ??
             (emailStr.contains('@') ? emailStr.split('@')[0] : 'Usuario');
+        final roleMeta = (res.user!.userMetadata?['role'] as String?) ?? 'empleado';
         state = AuthStateData(
           isAuthenticated: true,
           email: emailStr,
           fullName: nameMeta,
-          userRole: 'super_admin',
+          userRole: roleMeta,
         );
         _loadUserProfile(res.user!.id, emailStr, nameMeta);
         return null; // Éxito

@@ -57,19 +57,25 @@ export function App() {
     setCredits([]);
 
     try {
-      // 1. Consulta simple de clientes en public.customers
+      // 1. Consulta filtrada de clientes en public.customers
       let foundCustomer: Customer | null = null;
       try {
-        const { data: allCustomers, error: custError } = await supabase
+        let filterOr = `document_id.eq.${cleanId},document_id.ilike.%${cleanId}%,phone.ilike.%${cleanId}%`;
+        if (cleanId.length >= 3) {
+          filterOr += `,name.ilike.%${cleanId}%`;
+        }
+
+        const { data: matchedCustomers, error: custError } = await supabase
           .from('customers')
-          .select('*');
+          .select('*')
+          .or(filterOr);
 
         if (custError) {
           console.warn('Advertencia en customers:', custError.message);
         }
 
-        if (allCustomers && allCustomers.length > 0) {
-          const match = allCustomers.find((c: any) => {
+        if (matchedCustomers && matchedCustomers.length > 0) {
+          const match = matchedCustomers.find((c: any) => {
             const doc = String(c.document_id || '').replace(/[^a-zA-Z0-9]/g, '');
             const phone = String(c.phone || '').replace(/[^a-zA-Z0-9]/g, '');
             const name = String(c.name || '').toLowerCase();
@@ -81,7 +87,7 @@ export function App() {
               phone.includes(cleanId) || 
               (cleanId.length >= 3 && name.includes(cleanId.toLowerCase()))
             );
-          });
+          }) || matchedCustomers[0];
 
           if (match) {
             foundCustomer = {
@@ -99,10 +105,19 @@ export function App() {
         console.warn('Excepción consulta customers:', e);
       }
 
-      // 2. Consulta simple de créditos en public.credits
-      const { data: allCredits, error: credErr } = await supabase
+      // 2. Consulta filtrada de créditos en public.credits
+      let credFilterOr = `notes.ilike.%${cleanId}%,customer_phone.ilike.%${cleanId}%`;
+      if (foundCustomer) {
+        credFilterOr = `customer_id.eq.${foundCustomer.id},${credFilterOr}`;
+        if (foundCustomer.name) {
+          credFilterOr += `,customer_name.ilike.%${foundCustomer.name}%`;
+        }
+      }
+
+      const { data: matchedCredits, error: credErr } = await supabase
         .from('credits')
-        .select('*');
+        .select('*')
+        .or(credFilterOr);
 
       if (credErr) {
         console.error('Error cargando créditos de Supabase:', credErr);
@@ -113,8 +128,8 @@ export function App() {
 
       let rawCredits: Record<string, any>[] = [];
 
-      if (allCredits && allCredits.length > 0) {
-        rawCredits = allCredits.filter((c: any) => {
+      if (matchedCredits && matchedCredits.length > 0) {
+        rawCredits = matchedCredits.filter((c: any) => {
           const notesStr = String(c.notes || '');
           const cleanNotes = notesStr.replace(/[^a-zA-Z0-9]/g, '');
           const custIdStr = String(c.customer_id || '');

@@ -451,6 +451,7 @@ class _NewCreditSheetState extends ConsumerState<_NewCreditSheet> {
                   flex: 2,
                   child: DropdownButtonFormField<String>(
                     initialValue: _docType,
+                    isExpanded: true,
                     decoration: const InputDecoration(labelText: 'Tipo'),
                     items: const [
                       DropdownMenuItem(value: 'CC', child: Text('CC')),
@@ -612,6 +613,7 @@ class _NewCreditSheetState extends ConsumerState<_NewCreditSheet> {
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     initialValue: _frequency,
+                    isExpanded: true,
                     decoration: const InputDecoration(labelText: 'Frecuencia de Pago'),
                     items: const [
                       DropdownMenuItem(value: 'semanal', child: Text('Semanal')),

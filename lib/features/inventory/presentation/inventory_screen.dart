@@ -512,6 +512,7 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
                     const SizedBox(height: 6),
                     DropdownButtonFormField<String>(
                       initialValue: _category,
+                      isExpanded: true,
                       dropdownColor: Colors.white,
                       style: FontTokens.bodyMedium.copyWith(color: ColorTokens.lightTextPrimary, fontWeight: FontWeight.w600),
                       iconEnabledColor: ColorTokens.lightBrandPrimary,
@@ -533,6 +534,7 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
                           value: c,
                           child: Text(
                             c,
+                            overflow: TextOverflow.ellipsis,
                             style: FontTokens.bodyMedium.copyWith(color: ColorTokens.lightTextPrimary, fontWeight: FontWeight.w600),
                           ),
                         );

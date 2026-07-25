@@ -272,6 +272,7 @@ class _NewCustomerSheetState extends State<_NewCustomerSheet> {
                 flex: 2,
                 child: DropdownButtonFormField<String>(
                   initialValue: _docType,
+                  isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Tipo Doc.'),
                   items: const [
                     DropdownMenuItem(value: 'CC', child: Text('CC')),

@@ -140,8 +140,15 @@ class _NewSaleSheetState extends ConsumerState<NewSaleSheet> {
         );
         ReceiptModal.show(context, sale);
       }
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al registrar la venta: ${e.toString()}'),
+            backgroundColor: ColorTokens.statusDanger,
+            duration: const Duration(seconds: 4),
+          ),
+        );
         setState(() {
           _isSubmitting = false;
         });

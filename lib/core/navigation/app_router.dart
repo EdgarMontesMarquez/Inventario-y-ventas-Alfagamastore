@@ -25,9 +25,16 @@ final rootNavigatorKey = GlobalKey<NavigatorState>();
 final shellNavigatorKey = GlobalKey<NavigatorState>();
 
 final routerProvider = Provider<GoRouter>((ref) {
+  final authListenable = ValueNotifier<AuthStateData>(ref.read(authProvider));
+  ref.listen<AuthStateData>(authProvider, (_, next) {
+    authListenable.value = next;
+  });
+  ref.onDispose(() => authListenable.dispose());
+
   return GoRouter(
     navigatorKey: rootNavigatorKey,
     initialLocation: '/splash',
+    refreshListenable: authListenable,
     redirect: (context, state) {
       final isLoggedIn = ref.read(authProvider).isAuthenticated;
       final loc = state.matchedLocation;

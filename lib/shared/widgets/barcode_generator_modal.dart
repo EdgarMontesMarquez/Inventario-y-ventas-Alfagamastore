@@ -189,7 +189,7 @@ class _BarcodeGeneratorModalState extends State<BarcodeGeneratorModal> {
           return [
             pw.GridView(
               crossAxisCount: 3,
-              childAspectRatio: 1.8,
+              childAspectRatio: 0.5,
               crossAxisSpacing: 10,
               mainAxisSpacing: 10,
               children: productsList.map((p) {
@@ -198,24 +198,40 @@ class _BarcodeGeneratorModalState extends State<BarcodeGeneratorModal> {
                 final pPrice = (p['price'] as num?)?.toDouble() ?? 0.0;
 
                 return pw.Container(
-                  padding: const pw.EdgeInsets.all(6),
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 4),
                   decoration: pw.BoxDecoration(
-                    border: pw.Border.all(color: PdfColors.grey400),
+                    border: pw.Border.all(color: PdfColors.black, width: 1.2),
                     borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
                   ),
                   child: pw.Column(
-                    mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+                    mainAxisAlignment: pw.MainAxisAlignment.center,
                     children: [
-                      pw.Text(pName.toUpperCase(), style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold), maxLines: 1),
+                      pw.Text('ALFA GAMA STORE', style: pw.TextStyle(fontSize: 6.5, fontWeight: pw.FontWeight.bold)),
+                      pw.SizedBox(height: 1),
+                      pw.Text(
+                        pName.toUpperCase(),
+                        style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+                        textAlign: pw.TextAlign.center,
+                        maxLines: 1,
+                      ),
+                      pw.SizedBox(height: 3),
                       pw.BarcodeWidget(
                         barcode: pw.Barcode.code128(),
-                        data: pSku,
-                        width: 120,
-                        height: 35,
+                        data: pSku.isNotEmpty ? pSku : '000000',
+                        width: 110,
+                        height: 30,
                         drawText: true,
-                        textStyle: const pw.TextStyle(fontSize: 8),
+                        textStyle: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold),
                       ),
-                      pw.Text(CurrencyUtils.format(pPrice), style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                      pw.SizedBox(height: 3),
+                      pw.Container(
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        color: PdfColors.black,
+                        child: pw.Text(
+                          'PRECIO: ${CurrencyUtils.format(pPrice)}',
+                          style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+                        ),
+                      ),
                     ],
                   ),
                 );
