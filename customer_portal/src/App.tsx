@@ -54,78 +54,115 @@ export function App() {
     setCredits([]);
 
     try {
-      // 1. Buscar Cliente por Documento en la tabla `customers`
+      // 1. Buscar Cliente en la tabla `customers` (por document_id o phone)
       let foundCustomer: Customer | null = null;
-      const { data: customersData } = await supabase
-        .from('customers')
-        .select('*')
-        .or(`document_id.eq.${cleanId},phone.eq.${cleanId}`)
-        .limit(1);
+      try {
+        const { data: custData } = await supabase
+          .from('customers')
+          .select('*')
+          .or(`document_id.eq.${cleanId},phone.eq.${cleanId}`)
+          .limit(1);
 
-      if (customersData && customersData.length > 0) {
-        const cData = customersData[0];
-        foundCustomer = {
-          id: cData.id,
-          name: cData.name,
-          phone: cData.phone,
-          address: cData.address,
-          document_type: cData.document_type || typeToUse,
-          document_id: cData.document_id || cleanId
-        };
-        setCustomer(foundCustomer);
+        if (custData && custData.length > 0) {
+          const cData = custData[0];
+          foundCustomer = {
+            id: String(cData.id),
+            name: cData.name || 'Cliente AlfaGama',
+            phone: cData.phone || '',
+            address: cData.address || '',
+            document_type: cData.document_type || typeToUse,
+            document_id: cData.document_id || cleanId
+          };
+          setCustomer(foundCustomer);
+        }
+      } catch (e) {
+        console.warn('Busqueda en customers falló o tabla vacía:', e);
       }
 
-      // 2. Buscar Créditos (vía ID de cliente, o vía búsqueda directa en `notes` / `customer_name`)
-      let creditsQuery = supabase.from('credits').select('*');
-      if (foundCustomer) {
-        creditsQuery = creditsQuery.or(`customer_id.eq.${foundCustomer.id},customer_name.ilike.%${foundCustomer.name}%,notes.ilike.%${cleanId}%`);
-      } else {
-        creditsQuery = creditsQuery.or(`notes.ilike.%${cleanId}%,customer_phone.eq.${cleanId}`);
+      // 2. Buscar Créditos asociados (por customer_id, o por documento/teléfono en notas)
+      let rawCredits: Record<string, any>[] = [];
+
+      // Intento A: Consulta directa filtrada por Supabase
+      try {
+        let query = supabase.from('credits').select('*');
+        if (foundCustomer) {
+          query = query.or(`customer_id.eq.${foundCustomer.id},customer_name.ilike.%${foundCustomer.name}%,notes.ilike.%${cleanId}%`);
+        } else {
+          query = query.or(`notes.ilike.%${cleanId}%,customer_phone.eq.${cleanId},customer_name.ilike.%${cleanId}%`);
+        }
+        const { data: filteredData } = await query.order('created_at', { ascending: false });
+        if (filteredData && filteredData.length > 0) {
+          rawCredits = filteredData;
+        }
+      } catch (e) {
+        console.warn('Filtro relacional Supabase falló, ejecutando fallback:', e);
       }
 
-      const { data: creditsData, error: credError } = await creditsQuery.order('created_at', { ascending: false });
+      // Intento B (Fallback de Resiliencia): Si el filtro no trajo resultados, consultar todos los créditos y filtrar cliente-side
+      if (rawCredits.length === 0) {
+        const { data: allData } = await supabase
+          .from('credits')
+          .select('*')
+          .order('created_at', { ascending: false });
 
-      if (credError) {
-        throw new Error('Error consultando créditos en el sistema.');
+        if (allData && allData.length > 0) {
+          rawCredits = allData.filter((c: Record<string, any>) => {
+            const notesStr = String(c.notes || '');
+            const custIdStr = String(c.customer_id || '');
+            const phoneStr = String(c.customer_phone || '');
+            const nameStr = String(c.customer_name || '');
+
+            return (
+              (foundCustomer && custIdStr === foundCustomer.id) ||
+              notesStr.includes(cleanId) ||
+              phoneStr.includes(cleanId) ||
+              (foundCustomer && nameStr.toLowerCase().includes(foundCustomer.name.toLowerCase()))
+            );
+          });
+        }
       }
 
-      if (!creditsData || creditsData.length === 0) {
+      if (rawCredits.length === 0) {
         setLoading(false);
         return;
       }
 
-      // 3. Cargar Cuotas (Installments) para cada crédito
+      // 3. Cargar Cuotas (Installments) para cada crédito encontrado
       const fullCredits: Credit[] = await Promise.all(
-        creditsData.map(async (c: Record<string, any>) => {
-          const { data: instData } = await supabase
-            .from('credit_installments')
-            .select('*')
-            .eq('credit_id', c.id)
-            .order('number', { ascending: true });
+        rawCredits.map(async (c: Record<string, any>) => {
+          let instList: any[] = [];
+          try {
+            const { data: instData } = await supabase
+              .from('credit_installments')
+              .select('*')
+              .eq('credit_id', c.id)
+              .order('number', { ascending: true });
+            if (instData) instList = instData;
+          } catch (_) {}
 
           const totalAmt = Number(c.total_amount || 0);
           const paidAmt = Number(c.paid_amount || 0);
 
           return {
-            id: c.id,
-            customer_id: c.customer_id,
+            id: String(c.id),
+            customer_id: c.customer_id ? String(c.customer_id) : undefined,
             customer_name: c.customer_name || foundCustomer?.name || 'Cliente AlfaGama',
-            customer_phone: c.customer_phone || foundCustomer?.phone,
-            customer_address: c.customer_address || foundCustomer?.address,
+            customer_phone: c.customer_phone || foundCustomer?.phone || '',
+            customer_address: c.customer_address || foundCustomer?.address || '',
             products: c.products || 'Productos adquiridos a crédito',
             total_amount: totalAmt,
             paid_amount: paidAmt,
             interest_rate: Number(c.interest_rate || 0),
             interest_amount: Number(c.interest_amount || 0),
-            installments_count: Number(c.installments_count || 1),
+            installments_count: Number(c.installments_count || (instList.length > 0 ? instList.length : 1)),
             payment_frequency: c.payment_frequency || 'mensual',
             status: c.status || (paidAmt >= totalAmt ? 'finalizado' : 'activo'),
             due_date: c.due_date || new Date().toISOString(),
             notes: c.notes,
-            created_at: c.created_at,
-            installments: (instData || []).map((inst: Record<string, any>) => ({
-              id: inst.id,
-              credit_id: inst.credit_id,
+            created_at: c.created_at || new Date().toISOString(),
+            installments: instList.map((inst: Record<string, any>) => ({
+              id: String(inst.id),
+              credit_id: String(inst.credit_id),
               number: Number(inst.number || 1),
               amount: Number(inst.amount || 0),
               paid_amount: Number(inst.paid_amount || 0),
@@ -142,7 +179,7 @@ export function App() {
 
       setCredits(fullCredits);
     } catch (err: any) {
-      setErrorMsg(err.message || 'No se pudo conectar con el sistema. Intente de nuevo.');
+      setErrorMsg(err.message || 'No se pudo conectar con la base de datos de Supabase.');
     } finally {
       setLoading(false);
     }
@@ -171,47 +208,47 @@ export function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col justify-between">
-      {/* Header Bar con Logo Oficial */}
-      <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-30 shadow-lg">
+    <div className="min-h-screen bg-[#F4F7FF] text-[#0A192F] flex flex-col justify-between font-['Inter',sans-serif]">
+      {/* Header Bar - Azul Noche & Azul Eléctrico */}
+      <header className="bg-[#0A192F] text-white border-b border-slate-800 sticky top-0 z-30 shadow-md">
         <div className="max-w-4xl mx-auto px-4 py-3.5 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img 
               src="/logo.png" 
               alt="Alfa Gama Store Logo" 
-              className="w-10 h-10 object-contain rounded-xl bg-white/10 p-1 border border-white/20 shadow-sm" 
+              className="w-10 h-10 object-contain rounded-xl bg-white/10 p-1 border border-white/20 shadow-xs" 
             />
             <div>
               <h1 className="font-heading font-extrabold text-lg text-white leading-tight tracking-wide">
                 ALFA GAMA STORE
               </h1>
-              <p className="text-[11px] text-indigo-400 font-semibold tracking-wider uppercase">
+              <p className="text-[11px] text-[#0066FF] font-semibold tracking-wider uppercase">
                 PORTAL DE CRÉDITOS Y ESTADO DE CUENTA
               </p>
             </div>
           </div>
-          <div className="hidden sm:flex items-center gap-2 text-xs text-slate-300 bg-slate-800/90 border border-slate-700/80 px-3.5 py-1.5 rounded-full shadow-inner">
-            <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <span className="font-medium">Consulta Directa & Segura</span>
+          <div className="hidden sm:flex items-center gap-2 text-xs text-slate-300 bg-slate-800/80 border border-slate-700 px-3.5 py-1.5 rounded-full shadow-inner">
+            <ShieldCheck className="w-4 h-4 text-[#10B981]" />
+            <span className="font-medium">Consulta Segura 24/7</span>
           </div>
         </div>
       </header>
 
       {/* Main Content Container */}
       <main className="max-w-4xl mx-auto px-4 py-8 w-full grow">
-        {/* Card de Búsqueda con Banner Brand Accent */}
-        <div className="glass-card rounded-2xl p-6 sm:p-8 mb-8 border border-slate-200/90 shadow-xl relative overflow-hidden">
-          {/* Accent Bar Top */}
-          <div className="absolute top-0 left-0 right-0 h-1.5 bg-linear-to-r from-indigo-600 via-indigo-500 to-emerald-500" />
+        {/* Card de Búsqueda con Azul Eléctrico (#0066FF) y Fondo Blanco Nítido */}
+        <div className="glass-card rounded-2xl p-6 sm:p-8 mb-8 border border-slate-200 shadow-xl relative overflow-hidden bg-white">
+          {/* Accent Bar Top en Azul Eléctrico */}
+          <div className="absolute top-0 left-0 right-0 h-1.5 bg-[#0066FF]" />
 
           <div className="text-center max-w-xl mx-auto mb-6 pt-2">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 mb-3 border border-indigo-100 shadow-xs">
-              <Sparkles className="w-3.5 h-3.5 text-indigo-600" /> Consulta Tu Estado de Cuenta
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#E6F0FF] text-[#0066FF] mb-3 border border-[#BFDBFE]">
+              <Sparkles className="w-3.5 h-3.5 text-[#0066FF]" /> Estado de Cuenta en Tiempo Real
             </span>
-            <h2 className="font-heading font-extrabold text-2xl sm:text-3xl text-slate-900 mb-2">
-              Historial Crediticio y Abonos
+            <h2 className="font-heading font-extrabold text-2xl sm:text-3xl text-[#0A192F] mb-2">
+              Consulta tu Historial de Crédito
             </h2>
-            <p className="text-slate-500 text-sm">
+            <p className="text-[#475569] text-sm">
               Ingresa tu tipo y número de documento registrado para consultar saldos pendientes, plan de cuotas y recibos de abonos.
             </p>
           </div>
@@ -226,13 +263,13 @@ export function App() {
           >
             {/* Selector de Tipo de Documento */}
             <div className="w-full sm:w-48">
-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+              <label className="block text-xs font-bold text-[#475569] uppercase tracking-wider mb-1.5">
                 TIPO DOC.
               </label>
               <select
                 value={docType}
                 onChange={(e) => setDocType(e.target.value)}
-                className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-3 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-xs"
+                className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-3 text-sm font-semibold text-[#0A192F] focus:outline-none focus:ring-2 focus:ring-[#0066FF] focus:border-[#0066FF] shadow-xs"
               >
                 <option value="CC">Cédula Ciudadanía (CC)</option>
                 <option value="CE">Cédula Extranjería (CE)</option>
@@ -243,7 +280,7 @@ export function App() {
 
             {/* Input Número de Documento */}
             <div className="flex-1">
-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+              <label className="block text-xs font-bold text-[#475569] uppercase tracking-wider mb-1.5">
                 NÚMERO DE DOCUMENTO
               </label>
               <div className="relative">
@@ -252,7 +289,7 @@ export function App() {
                   placeholder="Ej: 1107858381"
                   value={docId}
                   onChange={(e) => setDocId(e.target.value)}
-                  className="w-full bg-white border border-slate-300 rounded-xl pl-4 pr-10 py-3 text-sm font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-xs"
+                  className="w-full bg-white border border-slate-300 rounded-xl pl-4 pr-10 py-3 text-sm font-semibold text-[#0A192F] placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0066FF] focus:border-[#0066FF] shadow-xs"
                 />
                 {docId && (
                   <button
@@ -266,12 +303,12 @@ export function App() {
               </div>
             </div>
 
-            {/* Botón Consultar */}
+            {/* Botón Consultar en Azul Eléctrico (#0066FF) */}
             <div className="sm:self-end w-full sm:w-auto">
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 py-3 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-lg shadow-indigo-200 active:scale-95 disabled:opacity-50 cursor-pointer"
+                className="w-full sm:w-auto bg-[#0066FF] hover:bg-[#0052CC] text-white font-bold px-6 py-3 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-lg shadow-blue-200 active:scale-95 disabled:opacity-50 cursor-pointer"
               >
                 {loading ? (
                   <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -297,22 +334,22 @@ export function App() {
         {searched && !loading && (
           credits.length === 0 ? (
             <div className="bg-white rounded-2xl p-12 text-center border border-slate-200 shadow-sm">
-              <div className="w-16 h-16 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mx-auto mb-4">
-                <CreditCard className="w-8 h-8 text-slate-400" />
+              <div className="w-16 h-16 bg-[#F4F7FF] text-slate-400 rounded-full flex items-center justify-center mx-auto mb-4 border border-[#BFDBFE]">
+                <CreditCard className="w-8 h-8 text-[#0066FF]" />
               </div>
-              <h3 className="font-heading font-bold text-xl text-slate-800 mb-1">Sin créditos encontrados</h3>
-              <p className="text-slate-500 text-sm max-w-md mx-auto leading-relaxed">
-                No se encontraron créditos activos o finalizados asociados al número de documento <strong className="text-slate-800">{docType} {docId}</strong>.
+              <h3 className="font-heading font-bold text-xl text-[#0A192F] mb-1">Sin créditos registrados</h3>
+              <p className="text-[#475569] text-sm max-w-md mx-auto leading-relaxed">
+                No se encontraron créditos asociados al número <strong className="text-[#0A192F]">{docType} {docId}</strong>. Verifica que el número esté bien escrito o comunícate con la tienda.
               </p>
               <div className="mt-6">
                 <a
-                  href="https://wa.me/573001234567"
+                  href="https://wa.me/573163142258"
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-colors shadow-md shadow-emerald-200"
+                  className="inline-flex items-center gap-2 bg-[#10B981] hover:bg-[#047857] text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-colors shadow-md shadow-emerald-200"
                 >
                   <MessageSquare className="w-4 h-4" />
-                  <span>Consultar con la Tienda por WhatsApp</span>
+                  <span>Consultar por WhatsApp (316 314 2258)</span>
                 </a>
               </div>
             </div>
@@ -321,24 +358,24 @@ export function App() {
               {/* Tarjeta Titular del Crédito */}
               <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                  <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider block mb-0.5">TITULAR REGISTRADO</span>
-                  <h3 className="font-heading font-extrabold text-xl text-slate-900">
+                  <span className="text-xs font-bold text-[#0066FF] uppercase tracking-wider block mb-0.5">TITULAR REGISTRADO</span>
+                  <h3 className="font-heading font-extrabold text-xl text-[#0A192F]">
                     {customer?.name || credits[0].customer_name}
                   </h3>
-                  <p className="text-xs text-slate-500 font-mono mt-0.5">
+                  <p className="text-xs text-[#475569] font-mono mt-0.5">
                     DOCUMENTO: {customer?.document_type || docType} {customer?.document_id || docId}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3 text-xs">
                   {credits[0].customer_phone && (
-                    <div className="flex items-center gap-1.5 bg-slate-100 px-3 py-1.5 rounded-lg text-slate-700 font-medium">
-                      <Phone className="w-3.5 h-3.5 text-indigo-600" />
+                    <div className="flex items-center gap-1.5 bg-[#F4F7FF] px-3 py-1.5 rounded-lg text-[#0A192F] font-medium border border-[#BFDBFE]">
+                      <Phone className="w-3.5 h-3.5 text-[#0066FF]" />
                       <span>{credits[0].customer_phone}</span>
                     </div>
                   )}
                   {credits[0].customer_address && (
-                    <div className="flex items-center gap-1.5 bg-slate-100 px-3 py-1.5 rounded-lg text-slate-700 font-medium">
-                      <MapPin className="w-3.5 h-3.5 text-indigo-600" />
+                    <div className="flex items-center gap-1.5 bg-[#F4F7FF] px-3 py-1.5 rounded-lg text-[#0A192F] font-medium border border-[#BFDBFE]">
+                      <MapPin className="w-3.5 h-3.5 text-[#0066FF]" />
                       <span>{credits[0].customer_address}</span>
                     </div>
                   )}
@@ -355,10 +392,10 @@ export function App() {
                 return (
                   <div key={credit.id} className="bg-white rounded-2xl border border-slate-200 shadow-md overflow-hidden">
                     {/* Header Crédito */}
-                    <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div className="p-6 border-b border-slate-100 bg-[#F4F7FF]/60 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                       <div>
                         <div className="flex items-center gap-2.5 mb-1">
-                          <span className="font-heading font-extrabold text-xl text-slate-900">
+                          <span className="font-heading font-extrabold text-xl text-[#0A192F]">
                             Crédito #{credits.length - idx}
                           </span>
                           <span className={`px-3 py-1 rounded-full text-xs font-extrabold ${
@@ -367,15 +404,15 @@ export function App() {
                             {isPaidFull ? 'FINALIZADO' : isMora ? 'EN MORA' : 'AL DÍA'}
                           </span>
                         </div>
-                        <p className="text-xs text-slate-500 font-medium">
+                        <p className="text-xs text-[#475569] font-medium">
                           REGISTRADO EL {formatDate(credit.created_at)} · {credit.products}
                         </p>
                       </div>
 
                       <div className="sm:text-right">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">SALDO PENDIENTE</span>
+                        <span className="text-[10px] font-bold text-[#475569] uppercase tracking-wider block">SALDO PENDIENTE</span>
                         <span className={`font-heading font-extrabold text-2xl ${
-                          pendingBalance > 0 ? 'text-indigo-600' : 'text-emerald-600'
+                          pendingBalance > 0 ? 'text-[#0066FF]' : 'text-[#10B981]'
                         }`}>
                           {formatCurrency(pendingBalance)}
                         </span>
@@ -384,14 +421,14 @@ export function App() {
 
                     {/* Barra de Progreso de Pago */}
                     <div className="px-6 pt-5">
-                      <div className="flex justify-between items-center text-xs font-bold text-slate-600 mb-1.5">
+                      <div className="flex justify-between items-center text-xs font-bold text-[#475569] mb-1.5">
                         <span>Progreso del Pago ({progressPct.toFixed(0)}%)</span>
                         <span>{formatCurrency(credit.paid_amount)} de {formatCurrency(credit.total_amount)}</span>
                       </div>
                       <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden shadow-inner">
                         <div 
                           className={`h-full transition-all duration-500 rounded-full ${
-                            isPaidFull ? 'bg-emerald-500' : 'bg-indigo-600'
+                            isPaidFull ? 'bg-[#10B981]' : 'bg-[#0066FF]'
                           }`}
                           style={{ width: `${progressPct}%` }}
                         />
@@ -400,40 +437,40 @@ export function App() {
 
                     {/* Resumen Métricas */}
                     <div className="p-6 grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-                      <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">MONTO TOTAL</span>
-                        <span className="font-heading font-extrabold text-base text-slate-800">{formatCurrency(credit.total_amount)}</span>
+                      <div className="bg-[#F4F7FF] p-3.5 rounded-xl border border-slate-200/80">
+                        <span className="text-[10px] font-bold text-[#475569] uppercase tracking-wider block">MONTO TOTAL</span>
+                        <span className="font-heading font-extrabold text-base text-[#0A192F]">{formatCurrency(credit.total_amount)}</span>
                       </div>
-                      <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">TOTAL ABONADO</span>
-                        <span className="font-heading font-extrabold text-base text-emerald-600">{formatCurrency(credit.paid_amount)}</span>
+                      <div className="bg-[#F4F7FF] p-3.5 rounded-xl border border-slate-200/80">
+                        <span className="text-[10px] font-bold text-[#475569] uppercase tracking-wider block">TOTAL ABONADO</span>
+                        <span className="font-heading font-extrabold text-base text-[#10B981]">{formatCurrency(credit.paid_amount)}</span>
                       </div>
-                      <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">NÚMERO DE CUOTAS</span>
-                        <span className="font-heading font-extrabold text-base text-slate-800">{credit.installments_count} ({credit.payment_frequency})</span>
+                      <div className="bg-[#F4F7FF] p-3.5 rounded-xl border border-slate-200/80">
+                        <span className="text-[10px] font-bold text-[#475569] uppercase tracking-wider block">NÚMERO DE CUOTAS</span>
+                        <span className="font-heading font-extrabold text-base text-[#0A192F]">{credit.installments_count} ({credit.payment_frequency})</span>
                       </div>
-                      <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">FECHA VENCIMIENTO</span>
-                        <span className="font-heading font-extrabold text-base text-slate-800">{formatDate(credit.due_date)}</span>
+                      <div className="bg-[#F4F7FF] p-3.5 rounded-xl border border-slate-200/80">
+                        <span className="text-[10px] font-bold text-[#475569] uppercase tracking-wider block">FECHA VENCIMIENTO</span>
+                        <span className="font-heading font-extrabold text-base text-[#0A192F]">{formatDate(credit.due_date)}</span>
                       </div>
                     </div>
 
                     {/* Desglose de Cuotas & Comprobantes */}
                     <div className="px-6 pb-6">
-                      <h4 className="font-heading font-bold text-sm text-slate-800 mb-3 flex items-center gap-2 border-t border-slate-100 pt-4">
-                        <Clock className="w-4 h-4 text-indigo-600" />
+                      <h4 className="font-heading font-bold text-sm text-[#0A192F] mb-3 flex items-center gap-2 border-t border-slate-100 pt-4">
+                        <Clock className="w-4 h-4 text-[#0066FF]" />
                         Plan de Cuotas e Historial de Abonos
                       </h4>
 
                       {!credit.installments || credit.installments.length === 0 ? (
-                        <div className="p-4 bg-slate-50 rounded-xl text-xs text-slate-500 text-center">
+                        <div className="p-4 bg-[#F4F7FF] rounded-xl text-xs text-[#475569] text-center">
                           No hay desglose de cuotas registrado para este crédito.
                         </div>
                       ) : (
                         <div className="overflow-x-auto rounded-xl border border-slate-200/80">
                           <table className="w-full text-left text-xs border-collapse">
                             <thead>
-                              <tr className="bg-slate-100/80 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider">
+                              <tr className="bg-[#F4F7FF] border-b border-slate-200 text-[#475569] font-bold uppercase tracking-wider">
                                 <th className="py-3 px-3.5">Cuota #</th>
                                 <th className="py-3 px-3.5">Vencimiento</th>
                                 <th className="py-3 px-3.5">Monto Cuota</th>
@@ -447,28 +484,28 @@ export function App() {
                                 const hasReceipt = Boolean(inst.receipt_image_url && inst.receipt_image_url.trim().length > 0);
 
                                 return (
-                                  <tr key={inst.id} className="hover:bg-slate-50/80 transition-colors">
-                                    <td className="py-3 px-3.5 font-bold text-slate-800">
+                                  <tr key={inst.id} className="hover:bg-[#F4F7FF]/50 transition-colors">
+                                    <td className="py-3 px-3.5 font-bold text-[#0A192F]">
                                       Cuota #{inst.number}
                                     </td>
-                                    <td className="py-3 px-3.5 text-slate-600 font-medium">
+                                    <td className="py-3 px-3.5 text-[#475569] font-medium">
                                       {formatDate(inst.due_date)}
                                     </td>
-                                    <td className="py-3 px-3.5 font-extrabold text-slate-900">
+                                    <td className="py-3 px-3.5 font-extrabold text-[#0A192F]">
                                       {formatCurrency(inst.amount)}
                                     </td>
                                     <td className="py-3 px-3.5">
                                       {inst.is_paid ? (
-                                        <span className="inline-flex items-center gap-1 font-extrabold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-200 text-[11px]">
+                                        <span className="inline-flex items-center gap-1 font-extrabold text-[#047857] bg-[#E6F7F0] px-2.5 py-0.5 rounded-md border border-[#A7F3D0] text-[11px]">
                                           <CheckCircle2 className="w-3 h-3" /> Pagado
                                         </span>
                                       ) : (
-                                        <span className="inline-flex items-center gap-1 font-extrabold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-md border border-amber-200 text-[11px]">
+                                        <span className="inline-flex items-center gap-1 font-extrabold text-[#B91C1C] bg-[#FEE2E2] px-2.5 py-0.5 rounded-md border border-[#FECACA] text-[11px]">
                                           Pendiente
                                         </span>
                                       )}
                                     </td>
-                                    <td className="py-3 px-3.5 text-slate-500 font-medium">
+                                    <td className="py-3 px-3.5 text-[#475569] font-medium">
                                       {inst.paid_at ? formatDate(inst.paid_at) : '-'}
                                     </td>
                                     <td className="py-3 px-3.5 text-right">
@@ -479,7 +516,7 @@ export function App() {
                                             url: inst.receipt_image_url!.trim(),
                                             title: `Comprobante Cuota #${inst.number} - ${customer?.name || credit.customer_name}`
                                           })}
-                                          className="inline-flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold px-3 py-1.5 rounded-lg transition-colors border border-indigo-200 text-xs shadow-2xs cursor-pointer"
+                                          className="inline-flex items-center gap-1.5 bg-[#E6F0FF] hover:bg-[#BFDBFE] text-[#0066FF] font-bold px-3 py-1.5 rounded-lg transition-colors border border-[#BFDBFE] text-xs cursor-pointer"
                                           title="Ver foto del comprobante de transferencia"
                                         >
                                           <Eye className="w-3.5 h-3.5" />
@@ -507,10 +544,10 @@ export function App() {
 
       {/* Modal Foto de Comprobante */}
       {selectedImage && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-[#0A192F]/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-2xl w-full overflow-hidden shadow-2xl animate-modal border border-slate-200">
-            <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-              <h3 className="font-heading font-bold text-sm text-slate-800 truncate pr-4">
+            <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-[#F4F7FF]">
+              <h3 className="font-heading font-bold text-sm text-[#0A192F] truncate pr-4">
                 {selectedImage.title}
               </h3>
               <button
@@ -528,19 +565,19 @@ export function App() {
                 className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-md"
               />
             </div>
-            <div className="p-3.5 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
+            <div className="p-3.5 bg-[#F4F7FF] border-t border-slate-100 flex justify-between items-center">
               <a
                 href={selectedImage.url}
                 target="_blank"
                 rel="noreferrer"
-                className="text-xs text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1"
+                className="text-xs text-[#0066FF] hover:underline font-bold flex items-center gap-1"
               >
                 <ExternalLink className="w-3.5 h-3.5" /> Abrir Imagen Completa
               </a>
               <button
                 type="button"
                 onClick={() => setSelectedImage(null)}
-                className="bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs px-5 py-2 rounded-xl transition-colors cursor-pointer"
+                className="bg-[#0A192F] hover:bg-slate-800 text-white font-bold text-xs px-5 py-2 rounded-xl transition-colors cursor-pointer"
               >
                 Cerrar Ventana
               </button>
@@ -550,22 +587,22 @@ export function App() {
       )}
 
       {/* Footer & Contact Section */}
-      <footer className="bg-slate-900 text-slate-400 text-xs py-8 border-t border-slate-800 mt-12">
+      <footer className="bg-[#0A192F] text-slate-400 text-xs py-8 border-t border-slate-800 mt-12">
         <div className="max-w-4xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2.5">
-            <img src="/logo.png" alt="Logo AlfaGama" className="w-6 h-6 object-contain" />
-            <span className="font-bold text-slate-200">ALFA GAMA STORE</span>
+            <img src="/logo.png" alt="Logo AlfaGama" className="w-6 h-6 object-contain bg-white/10 p-0.5 rounded-md" />
+            <span className="font-bold text-white">ALFA GAMA STORE</span>
             <span className="text-slate-500">· Moda, Calidad y Estilo</span>
           </div>
           <div className="flex items-center gap-4 text-slate-300">
             <a
-              href="https://wa.me/573001234567"
+              href="https://wa.me/573163142258"
               target="_blank"
               rel="noreferrer"
               className="hover:text-emerald-400 flex items-center gap-1.5 transition-colors font-semibold"
             >
-              <MessageSquare className="w-4 h-4 text-emerald-500" />
-              <span>Soporte por WhatsApp</span>
+              <MessageSquare className="w-4 h-4 text-[#10B981]" />
+              <span>Soporte WhatsApp: 316 314 2258</span>
             </a>
           </div>
         </div>
