@@ -24,6 +24,20 @@ Antes de ejecutar este proyecto, asegúrate de tener instalado:
 - [Dart SDK](https://dart.dev/get-dart)
 - Un entorno de desarrollo (Android Studio, VS Code, etc.)
 
+## Variables de Entorno
+
+Este proyecto utiliza **Supabase** como backend. Para que el proyecto funcione correctamente, debes crear un archivo llamado `.env` en la raíz del proyecto (este archivo es ignorado por Git por seguridad) y agregar las siguientes credenciales que obtendrás desde el panel de tu proyecto en Supabase:
+
+```env
+# Configuración para el Portal Web (Vite / React)
+VITE_SUPABASE_URL=tu_url_de_supabase
+VITE_SUPABASE_ANON_KEY=tu_anon_key_de_supabase
+
+# Configuración para Flutter ERP
+SUPABASE_URL=tu_url_de_supabase
+SUPABASE_ANON_KEY=tu_anon_key_de_supabase
+```
+
 ## Primeros Pasos
 
 Para ejecutar el proyecto localmente, sigue estos pasos:
@@ -33,7 +47,8 @@ Para ejecutar el proyecto localmente, sigue estos pasos:
    ```bash
    flutter pub get
    ```
-3. Ejecuta la aplicación en tu dispositivo o emulador:
+3. Crea tu archivo `.env` en la raíz del proyecto basándote en la sección de **Variables de Entorno**.
+4. Ejecuta la aplicación en tu dispositivo o emulador:
    ```bash
    flutter run
    ```
