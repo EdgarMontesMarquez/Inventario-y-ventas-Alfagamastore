@@ -18,10 +18,19 @@ import '../../../core/utils/currency_formatter.dart';
 
 import '../../auth/providers/auth_provider.dart';
 
-class CreditsScreen extends ConsumerWidget {
+import 'finalized_credits_screen.dart';
+
+class CreditsScreen extends ConsumerStatefulWidget {
   const CreditsScreen({super.key});
 
-  void _openNewCreditSheet(BuildContext context, WidgetRef ref) {
+  @override
+  ConsumerState<CreditsScreen> createState() => _CreditsScreenState();
+}
+
+class _CreditsScreenState extends ConsumerState<CreditsScreen> {
+  String _searchQuery = '';
+
+  void _openNewCreditSheet(BuildContext context) {
     if (ref.read(authProvider).isEmpleado) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -56,7 +65,7 @@ class CreditsScreen extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final creditsAsync = ref.watch(creditsFutureProvider);
     final authState = ref.watch(authProvider);
 
@@ -64,6 +73,18 @@ class CreditsScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Créditos & Cobranza'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.history, size: 22, color: ColorTokens.lightBrandPrimary),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const FinalizedCreditsScreen(),
+                ),
+              );
+            },
+            tooltip: 'Créditos Finalizados',
+          ),
           IconButton(
             icon: const Icon(Icons.person_add_alt_1_outlined, size: 22, color: ColorTokens.lightBrandPrimary),
             onPressed: () {
@@ -75,7 +96,7 @@ class CreditsScreen extends ConsumerWidget {
       ),
       floatingActionButton: authState.isAdmin
           ? FloatingActionButton.extended(
-              onPressed: () => _openNewCreditSheet(context, ref),
+              onPressed: () => _openNewCreditSheet(context),
               backgroundColor: ColorTokens.lightBrandPrimary,
               icon: const Icon(Icons.add, color: Colors.white),
               label: const Text('Nuevo Crédito', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
@@ -100,9 +121,18 @@ class CreditsScreen extends ConsumerWidget {
             );
           }
 
-          final totalPorCobrar = credits.fold(0.0, (sum, c) => sum + c.pendingBalance);
+          final activeCredits = credits.where((c) => c.status != 'finalizado').toList();
+
+          final filteredActive = activeCredits.where((c) {
+            final s = _searchQuery.trim().toLowerCase();
+            final nameMatch = c.clientName.toLowerCase().contains(s);
+            final docMatch = c.generalNotes.toLowerCase().contains(s);
+            return nameMatch || docMatch;
+          }).toList();
+
+          final totalPorCobrar = activeCredits.fold(0.0, (sum, c) => sum + c.pendingBalance);
           final totalCobrado = credits.fold(0.0, (sum, c) => sum + c.totalPaid);
-          final morososCount = credits.where((c) => c.status == 'mora').length;
+          final morososCount = activeCredits.where((c) => c.status == 'mora').length;
 
           return RefreshIndicator(
             onRefresh: () async {
@@ -188,25 +218,48 @@ class CreditsScreen extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: 16),
+
+                  // Search Bar Input for Credits
+                  CustomTextField(
+                    label: '',
+                    hint: 'Buscar cliente por nombre o documento…',
+                    prefixIcon: const Icon(Icons.search, size: 20, color: ColorTokens.textMuted),
+                    onChanged: (val) {
+                      setState(() {
+                        _searchQuery = val;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 12),
                   const Divider(),
                   const SizedBox(height: 12),
 
                   // Lista de Créditos
-                  ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: credits.length,
-                    separatorBuilder: (context, idx) => const SizedBox(height: 10),
-                    itemBuilder: (context, idx) {
-                      final credit = credits[idx];
-                      return CreditCard(
-                        credit: credit,
-                        onTap: () {
-                          context.push('/credits/${credit.id}');
-                        },
-                      );
-                    },
-                  ),
+                  filteredActive.isEmpty
+                      ? Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 40),
+                          child: Center(
+                            child: Text(
+                              _searchQuery.isEmpty ? 'No hay créditos activos' : 'Sin resultados para la búsqueda',
+                              style: const TextStyle(color: ColorTokens.textMuted, fontWeight: FontWeight.w500),
+                            ),
+                          ),
+                        )
+                      : ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: filteredActive.length,
+                          separatorBuilder: (context, idx) => const SizedBox(height: 10),
+                          itemBuilder: (context, idx) {
+                            final credit = filteredActive[idx];
+                            return CreditCard(
+                              credit: credit,
+                              onTap: () {
+                                context.push('/credits/${credit.id}');
+                              },
+                            );
+                          },
+                        ),
                   const SizedBox(height: 80),
                 ],
               ),

@@ -58,4 +58,15 @@ class SupabaseCustomerRepository implements CustomerRepository {
       });
     }
   }
+
+  @override
+  Future<void> updateCustomer(Customer customer) async {
+    await client.from('customers').update({
+      'name': customer.name,
+      'phone': customer.phone,
+      'address': customer.address,
+      'document_type': customer.documentType,
+      'document_id': customer.documentId,
+    }).eq('id', customer.id);
+  }
 }

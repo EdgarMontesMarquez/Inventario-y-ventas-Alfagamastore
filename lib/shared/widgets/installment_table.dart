@@ -34,6 +34,7 @@ class InstallmentTable extends StatelessWidget {
       runningBal -= inst.paidAmount;
       rows.add(_RowData(inst: inst, balance: runningBal < 0 ? 0 : runningBal));
     }
+    final isCreditFullyPaid = runningBal <= 0;
 
     return Container(
       decoration: BoxDecoration(
@@ -84,7 +85,7 @@ class InstallmentTable extends StatelessWidget {
               rows: List.generate(rows.length, (index) {
                 final row = rows[index];
                 final inst = row.inst;
-                final s = inst.status;
+                final s = isCreditFullyPaid ? 'pagado' : inst.status;
                 final isEven = index % 2 == 0;
 
                 final rowColor = isEven

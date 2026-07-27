@@ -49,6 +49,30 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
     );
   }
 
+  void _openEditCustomerSheet(Customer customer) {
+    CustomOverlays.showBottomSheet(
+      context: context,
+      title: 'Editar cliente',
+      child: _NewCustomerSheet(
+        initialCustomer: customer,
+        onSave: (updatedCustomer) async {
+          final repo = ref.read(customerRepositoryProvider);
+          await repo.updateCustomer(updatedCustomer);
+          ref.invalidate(customersFutureProvider);
+          if (mounted) {
+            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Cliente actualizado exitosamente'),
+                backgroundColor: ColorTokens.lightBrandPrimary,
+              ),
+            );
+          }
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.listen(customersFutureProvider, (previous, next) {});
@@ -131,53 +155,59 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                         itemBuilder: (context, idx) {
                           final c = filtered[idx];
                           return Container(
-                            padding: const EdgeInsets.all(14),
                             decoration: BoxDecoration(
                               color: ColorTokens.surface,
                               border: Border.all(color: ColorTokens.border),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: Row(
-                              children: [
-                                CircleAvatar(
-                                  radius: 22,
-                                  backgroundColor: ColorTokens.surfaceElevated,
-                                  child: Text(
-                                    c.name.isNotEmpty ? c.name[0].toUpperCase() : 'C',
-                                    style: FontTokens.h3.copyWith(color: ColorTokens.primary),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(c.name, style: FontTokens.bodyLarge.copyWith(fontWeight: FontWeight.bold)),
-                                      const SizedBox(height: 2),
-                                      Row(
+                            child: InkWell(
+                              onTap: () => _openEditCustomerSheet(c),
+                              borderRadius: BorderRadius.circular(12),
+                              child: Padding(
+                                padding: const EdgeInsets.all(14),
+                                child: Row(
+                                  children: [
+                                    CircleAvatar(
+                                      radius: 22,
+                                      backgroundColor: ColorTokens.surfaceElevated,
+                                      child: Text(
+                                        c.name.isNotEmpty ? c.name[0].toUpperCase() : 'C',
+                                        style: FontTokens.h3.copyWith(color: ColorTokens.primary),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          const Icon(Icons.phone_outlined, size: 14, color: ColorTokens.textDim),
-                                          const SizedBox(width: 4),
-                                          Text(c.phone, style: FontTokens.bodySmall.copyWith(color: ColorTokens.textMuted)),
+                                          Text(c.name, style: FontTokens.bodyLarge.copyWith(fontWeight: FontWeight.bold)),
+                                          const SizedBox(height: 2),
+                                          Row(
+                                            children: [
+                                              const Icon(Icons.phone_outlined, size: 14, color: ColorTokens.textDim),
+                                              const SizedBox(width: 4),
+                                              Text(c.phone, style: FontTokens.bodySmall.copyWith(color: ColorTokens.textMuted)),
+                                            ],
+                                          ),
                                         ],
                                       ),
-                                    ],
-                                  ),
-                                ),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    Text('CRÉDITO ACTIVO', style: FontTokens.label.copyWith(fontSize: 8)),
-                                    Text(
-                                      CurrencyUtils.format(c.activeCreditBalance),
-                                      style: FontTokens.moneySmall.copyWith(
-                                        color: c.activeCreditBalance > 0 ? ColorTokens.secondary : ColorTokens.textDim,
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                                    ),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      children: [
+                                        Text('CRÉDITO ACTIVO', style: FontTokens.label.copyWith(fontSize: 8)),
+                                        Text(
+                                          CurrencyUtils.format(c.activeCreditBalance),
+                                          style: FontTokens.moneySmall.copyWith(
+                                            color: c.activeCreditBalance > 0 ? ColorTokens.secondary : ColorTokens.textDim,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),
-                              ],
+                              ),
                             ),
                           );
                         },
@@ -193,9 +223,13 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
 }
 
 class _NewCustomerSheet extends StatefulWidget {
+  final Customer? initialCustomer;
   final ValueChanged<Customer> onSave;
 
-  const _NewCustomerSheet({required this.onSave});
+  const _NewCustomerSheet({
+    this.initialCustomer,
+    required this.onSave,
+  });
 
   @override
   State<_NewCustomerSheet> createState() => _NewCustomerSheetState();
@@ -203,11 +237,21 @@ class _NewCustomerSheet extends StatefulWidget {
 
 class _NewCustomerSheetState extends State<_NewCustomerSheet> {
   final _formKey = GlobalKey<FormState>();
-  final _nameCtrl = TextEditingController();
-  final _phoneCtrl = TextEditingController();
-  final _addressCtrl = TextEditingController();
-  final _docIdCtrl = TextEditingController();
-  String _docType = 'CC';
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _phoneCtrl;
+  late final TextEditingController _addressCtrl;
+  late final TextEditingController _docIdCtrl;
+  late String _docType;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameCtrl = TextEditingController(text: widget.initialCustomer?.name);
+    _phoneCtrl = TextEditingController(text: widget.initialCustomer?.phone);
+    _addressCtrl = TextEditingController(text: widget.initialCustomer?.address);
+    _docIdCtrl = TextEditingController(text: widget.initialCustomer?.documentId);
+    _docType = widget.initialCustomer?.documentType ?? 'CC';
+  }
 
   @override
   void dispose() {
@@ -229,7 +273,7 @@ class _NewCustomerSheetState extends State<_NewCustomerSheet> {
 
     try {
       final customer = Customer(
-        id: const Uuid().v4(),
+        id: widget.initialCustomer?.id ?? const Uuid().v4(),
         name: _nameCtrl.text.trim(),
         phone: _phoneCtrl.text.trim(),
         address: _addressCtrl.text.trim(),
@@ -237,9 +281,9 @@ class _NewCustomerSheetState extends State<_NewCustomerSheet> {
         documentId: _docIdCtrl.text.trim().isNotEmpty
             ? _docIdCtrl.text.trim()
             : DateTime.now().millisecondsSinceEpoch.toString(),
-        totalPurchases: 0,
-        activeCreditBalance: 0,
-        createdAt: DateTime.now(),
+        totalPurchases: widget.initialCustomer?.totalPurchases ?? 0,
+        activeCreditBalance: widget.initialCustomer?.activeCreditBalance ?? 0,
+        createdAt: widget.initialCustomer?.createdAt ?? DateTime.now(),
       );
 
       widget.onSave(customer);
@@ -327,7 +371,7 @@ class _NewCustomerSheetState extends State<_NewCustomerSheet> {
           ),
           const SizedBox(height: 20),
           CustomButton(
-            text: 'Guardar cliente',
+            text: widget.initialCustomer != null ? 'Guardar cambios' : 'Guardar cliente',
             isLoading: _isSubmitting,
             onPressed: _submit,
           ),

@@ -41,6 +41,16 @@ class CreditCard extends StatelessWidget {
       progressColor = ColorTokens.statusSuccess;
     }
 
+    final notes = credit.generalNotes;
+    String? clientDoc;
+    if (notes.contains('Documento:')) {
+      final parts = notes.split('|');
+      final docPart = parts.firstWhere((p) => p.contains('Documento:'), orElse: () => '');
+      if (docPart.isNotEmpty) {
+        clientDoc = docPart.replaceAll('Documento:', '').trim();
+      }
+    }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
@@ -86,7 +96,7 @@ class CreditCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          credit.clientPhone,
+                          credit.clientPhone + (clientDoc != null ? ' · $clientDoc' : ''),
                           style: FontTokens.monoCode.copyWith(
                             color: ColorTokens.lightTextSecondary,
                             fontSize: 12,

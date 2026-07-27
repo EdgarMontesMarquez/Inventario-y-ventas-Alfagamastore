@@ -429,6 +429,59 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
     }
   }
 
+  void _delete() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('¿Eliminar producto?'),
+        content: Text('Esta acción no se puede deshacer. Se eliminará el producto "${widget.initialProduct!.name}" del inventario.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar', style: TextStyle(color: ColorTokens.textMuted)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: ColorTokens.error),
+            child: const Text('Sí, eliminar', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      setState(() {
+        _isSubmitting = true;
+      });
+      try {
+        final repo = ref.read(productRepositoryProvider);
+        await repo.deleteProduct(widget.initialProduct!.id);
+        ref.invalidate(productsFutureProvider);
+        if (mounted) {
+          Navigator.pop(context); // Close bottom sheet
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Producto eliminado exitosamente'),
+              backgroundColor: ColorTokens.error,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() {
+            _isSubmitting = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error al eliminar producto: $e'),
+              backgroundColor: ColorTokens.error,
+            ),
+          );
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final categories = ref.watch(categoryProvider).where((c) => c != 'Todos').toList();
@@ -622,6 +675,21 @@ class _ProductFormSheetState extends ConsumerState<_ProductFormSheet> {
             isLoading: _isSubmitting,
             onPressed: _submit,
           ),
+          if (widget.initialProduct != null) ...[
+            const SizedBox(height: 12),
+            OutlinedButton(
+              onPressed: _isSubmitting ? null : _delete,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: ColorTokens.error,
+                side: const BorderSide(color: ColorTokens.error),
+                minimumSize: const Size.fromHeight(50),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              child: const Text('Eliminar producto', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
         ],
       ),
     );

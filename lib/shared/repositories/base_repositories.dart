@@ -19,6 +19,7 @@ abstract class SaleRepository {
 abstract class CustomerRepository {
   Future<List<Customer>> getCustomers();
   Future<void> addCustomer(Customer customer);
+  Future<void> updateCustomer(Customer customer);
 }
 
 abstract class CreditRepository {

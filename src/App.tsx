@@ -19,6 +19,7 @@ interface CreditInstallment {
 }
 interface Credit {
   id: string; clientName: string; clientPhone: string; clientAddress: string
+  clientDocument: string
   products: string; totalSale: number; startDate: Date
   paymentFrequency: 'semanal' | 'quincenal' | 'mensual'
   totalQuotas: number; quotaValue: number
@@ -120,9 +121,9 @@ mariaInst[0].paidAmount = 150000; mariaInst[0].paidDate = d(2026, 4, 2); mariaIn
 mariaInst[1].paidAmount = 150000; mariaInst[1].paidDate = d(2026, 5, 5); mariaInst[1].paymentMethod = 'efectivo'
 
 const SEED_CREDITS: Credit[] = [
-  { id: 'c1', clientName: 'Luchy Tolu', clientPhone: '300 123 4567', clientAddress: 'Cra 5 #12-34', products: 'Televisor, Colchón base cama', totalSale: 3200000, startDate: d(2026, 6, 1), paymentFrequency: 'semanal', totalQuotas: 13, quotaValue: 246154, installments: lucyInst, generalNotes: 'Pagar únicamente los sábados. Conservar comprobante de pago.' },
-  { id: 'c2', clientName: 'Carlos Mendoza', clientPhone: '315 987 6543', clientAddress: 'Av. Simón Bolívar #8-21', products: 'Nevera Samsung 400L', totalSale: 2500000, startDate: d(2026, 4, 1), paymentFrequency: 'mensual', totalQuotas: 10, quotaValue: 250000, installments: carlosInst, generalNotes: '' },
-  { id: 'c3', clientName: 'María García', clientPhone: '321 456 7890', clientAddress: 'Cll 15 #6-78', products: 'Lavadora + Secadora LG', totalSale: 1800000, startDate: d(2026, 3, 1), paymentFrequency: 'mensual', totalQuotas: 12, quotaValue: 150000, installments: mariaInst, generalNotes: 'Acordado refinanciación pendiente.' },
+  { id: 'c1', clientName: 'Luchy Tolu', clientPhone: '300 123 4567', clientAddress: 'Cra 5 #12-34', clientDocument: '1098765432', products: 'Televisor, Colchón base cama', totalSale: 3200000, startDate: d(2026, 6, 1), paymentFrequency: 'semanal', totalQuotas: 13, quotaValue: 246154, installments: lucyInst, generalNotes: 'Pagar únicamente los sábados. Conservar comprobante de pago.' },
+  { id: 'c2', clientName: 'Carlos Mendoza', clientPhone: '315 987 6543', clientAddress: 'Av. Simón Bolívar #8-21', clientDocument: '80123456', products: 'Nevera Samsung 400L', totalSale: 2500000, startDate: d(2026, 4, 1), paymentFrequency: 'mensual', totalQuotas: 10, quotaValue: 250000, installments: carlosInst, generalNotes: '' },
+  { id: 'c3', clientName: 'María García', clientPhone: '321 456 7890', clientAddress: 'Cll 15 #6-78', clientDocument: '52435678', products: 'Lavadora + Secadora LG', totalSale: 1800000, startDate: d(2026, 3, 1), paymentFrequency: 'mensual', totalQuotas: 12, quotaValue: 150000, installments: mariaInst, generalNotes: 'Acordado refinanciación pendiente.' },
 ]
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -168,6 +169,12 @@ const IconMinus = () => <Ico d="M5 12h14" size={16} stroke={2.5} />
 const IconTrash = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6M9 6V4h6v2"/>
+  </svg>
+)
+const IconHistory = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 8v4l3 3" />
+    <path d="M3.05 11a9 9 0 1 1 .1 4.5m-.1-4.5H8M3 11V6" />
   </svg>
 )
 const IconLogout = () => <Ico d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" size={18} />
@@ -415,7 +422,7 @@ function AlertRow({ name, sku, msg, color }: { name: string; sku: string; msg: s
 
 // ─── Inventory Tab ────────────────────────────────────────────────────────────
 
-function InventoryTab({ products, onAdd, onUpdate }: { products: Product[]; onAdd: (p: Product) => void; onUpdate: (p: Product) => void }) {
+function InventoryTab({ products, onAdd, onUpdate, onDelete }: { products: Product[]; onAdd: (p: Product) => void; onUpdate: (p: Product) => void; onDelete: (id: string) => void }) {
   const [search, setSearch] = useState('')
   const [filterCat, setFilterCat] = useState('Todos')
   const [showForm, setShowForm] = useState(false)
@@ -476,12 +483,19 @@ function InventoryTab({ products, onAdd, onUpdate }: { products: Product[]; onAd
           </div>
         )}
       </div>
-      {showForm && <ProductForm initial={editProduct} onSave={p => { editProduct ? onUpdate(p) : onAdd(p); setShowForm(false) }} onClose={() => setShowForm(false)} />}
+      {showForm && (
+        <ProductForm
+          initial={editProduct}
+          onSave={p => { editProduct ? onUpdate(p) : onAdd(p); setShowForm(false) }}
+          onDelete={id => { onDelete(id); setShowForm(false) }}
+          onClose={() => setShowForm(false)}
+        />
+      )}
     </div>
   )
 }
 
-function ProductForm({ initial, onSave, onClose }: { initial: Product | null; onSave: (p: Product) => void; onClose: () => void }) {
+function ProductForm({ initial, onSave, onDelete, onClose }: { initial: Product | null; onSave: (p: Product) => void; onDelete: (id: string) => void; onClose: () => void }) {
   const [name, setName] = useState(initial?.name ?? '')
   const [sku, setSku] = useState(initial?.sku ?? '')
   const [price, setPrice] = useState(initial?.price?.toString() ?? '')
@@ -489,6 +503,7 @@ function ProductForm({ initial, onSave, onClose }: { initial: Product | null; on
   const [stock, setStock] = useState(initial?.stock?.toString() ?? '')
   const [minStock, setMinStock] = useState(initial?.minStock?.toString() ?? '5')
   const [category, setCategory] = useState(initial?.category ?? 'Abarrotes')
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false)
   const valid = name.trim() && sku.trim() && Number(price) > 0
   return (
     <div className="fade-in" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 50, display: 'flex', alignItems: 'flex-end' }}>
@@ -514,8 +529,50 @@ function ProductForm({ initial, onSave, onClose }: { initial: Product | null; on
           <button onClick={() => valid && onSave({ id: initial?.id ?? uid(), name: name.trim(), sku: sku.trim().toUpperCase(), price: Number(price), cost: Number(cost), stock: Number(stock) || 0, minStock: Number(minStock) || 5, category })} disabled={!valid} style={{ background: valid ? '#00e676' : '#1a1a1a', color: valid ? '#000' : '#444', border: 'none', borderRadius: 12, padding: 14, fontSize: 15, fontWeight: 600, cursor: valid ? 'pointer' : 'not-allowed', marginTop: 6 }}>
             {initial ? 'Guardar cambios' : 'Agregar producto'}
           </button>
+          {initial && (
+            <button onClick={() => setShowConfirmDelete(true)} style={{ background: 'rgba(255,61,61,0.08)', color: '#ff3d3d', border: '1px solid rgba(255,61,61,0.15)', borderRadius: 12, padding: 14, fontSize: 15, fontWeight: 600, cursor: 'pointer', marginTop: 4 }}>
+              Eliminar producto
+            </button>
+          )}
         </div>
       </div>
+
+      {showConfirmDelete && (
+        <div className="fade-in" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div className="scale-up" style={{ background: '#0e0e0e', border: '1px solid #222', borderRadius: 16, padding: '20px 24px', width: '100%', maxWidth: 340, textAlign: 'center' }}>
+            <div style={{ color: '#ff3d3d', marginBottom: 12, display: 'flex', justifyContent: 'center' }}>
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#ff3d3d" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/>
+                <line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8, color: '#f0f0f0' }}>¿Eliminar producto?</div>
+            <div style={{ fontSize: 13, color: '#888', marginBottom: 20, lineHeight: 1.4 }}>
+              Esta acción no se puede deshacer. Se eliminará el producto <strong>{name}</strong> del inventario.
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => setShowConfirmDelete(false)}
+                style={{ flex: 1, background: '#1a1a1a', border: 'none', color: '#888', borderRadius: 10, padding: '12px 0', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  if (initial) {
+                    onDelete(initial.id)
+                  }
+                  setShowConfirmDelete(false)
+                }}
+                style={{ flex: 1, background: '#ff3d3d', border: 'none', color: '#000', borderRadius: 10, padding: '12px 0', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}
+              >
+                Sí, eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -668,12 +725,25 @@ function NewSaleModal({ products, onSave, onClose }: { products: Product[]; onSa
 function CreditTab({ credits, onAdd, onUpdate }: { credits: Credit[]; onAdd: (c: Credit) => void; onUpdate: (c: Credit) => void }) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [showNewForm, setShowNewForm] = useState(false)
+  const [showFinalized, setShowFinalized] = useState(false)
+  const [search, setSearch] = useState('')
 
   const selected = credits.find(c => c.id === selectedId) ?? null
 
   if (selected) {
     return <CreditDetail credit={selected} onBack={() => setSelectedId(null)} onUpdate={onUpdate} />
   }
+
+  const activeCredits = useMemo(() => credits.filter(c => creditStatus(c) !== 'finalizado'), [credits])
+
+  const filteredActive = useMemo(() => {
+    return activeCredits.filter(c => {
+      const s = search.toLowerCase()
+      const nameMatch = c.clientName.toLowerCase().includes(s)
+      const docMatch = c.clientDocument ? c.clientDocument.toLowerCase().includes(s) : false
+      return nameMatch || docMatch
+    })
+  }, [activeCredits, search])
 
   const totalReceivable = credits.reduce((s, c) => s + pendingBalance(c), 0)
   const inMora = credits.filter(c => creditStatus(c) === 'mora').length
@@ -684,11 +754,16 @@ function CreditTab({ credits, onAdd, onUpdate }: { credits: Credit[]; onAdd: (c:
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <div>
             <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: '#555', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 2 }}>Créditos</div>
-            <div style={{ fontSize: 18, fontWeight: 600 }}>{credits.length} registros</div>
+            <div style={{ fontSize: 18, fontWeight: 600 }}>{activeCredits.length} activos</div>
           </div>
-          <button onClick={() => setShowNewForm(true)} style={{ background: '#448aff', color: '#fff', border: 'none', borderRadius: 10, padding: '9px 14px', fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-            <IconPlus size={16} /> Nuevo
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => setShowFinalized(true)} style={{ background: '#1a1a1a', border: '1px solid #222', color: '#888', borderRadius: 10, padding: '9px 12px', fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+              <IconHistory size={16} /> Finalizados
+            </button>
+            <button onClick={() => setShowNewForm(true)} style={{ background: '#448aff', color: '#fff', border: 'none', borderRadius: 10, padding: '9px 14px', fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+              <IconPlus size={16} /> Nuevo
+            </button>
+          </div>
         </div>
         {/* Summary bar */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
@@ -701,43 +776,150 @@ function CreditTab({ credits, onAdd, onUpdate }: { credits: Credit[]; onAdd: (c:
             <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 14, fontWeight: 700, color: inMora > 0 ? '#ff3d3d' : '#555' }}>{inMora} créditos</div>
           </div>
         </div>
+        {/* Search Bar */}
+        <div style={{ position: 'relative', marginBottom: 14 }}>
+          <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#444', display: 'flex' }}><IconSearch /></span>
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar cliente por nombre o documento…"
+            style={{ width: '100%', background: '#111', border: '1px solid #222', borderRadius: 10, padding: '10px 12px 10px 36px', color: '#f0f0f0', fontSize: 14 }}
+          />
+        </div>
         <div style={{ height: 1, background: '#1e1e1e' }} />
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px 16px' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {credits.map(c => {
-            const st = creditStatus(c)
-            const pct = progressPct(c)
-            const next = nextDueInstallment(c)
-            const od = overdueCount(c)
-            return (
-              <div key={c.id} onClick={() => setSelectedId(c.id)} style={{ background: '#111', border: `1px solid ${st === 'mora' ? 'rgba(255,61,61,0.25)' : '#1e1e1e'}`, borderRadius: 12, padding: '14px 14px', cursor: 'pointer' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
-                  <div style={{ flex: 1, paddingRight: 10 }}>
-                    <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 2 }}>{c.clientName}</div>
-                    <div style={{ fontSize: 12, color: '#555', marginBottom: 2 }}>{c.products}</div>
-                    <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#444' }}>{c.clientPhone}</div>
+        {filteredActive.length === 0 ? (
+          <div style={{ textAlign: 'center', color: '#333', fontFamily: 'JetBrains Mono, monospace', fontSize: 13, paddingTop: 40 }}>Sin resultados</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {filteredActive.map(c => {
+              const st = creditStatus(c)
+              const pct = progressPct(c)
+              const next = nextDueInstallment(c)
+              const od = overdueCount(c)
+              return (
+                <div key={c.id} onClick={() => setSelectedId(c.id)} style={{ background: '#111', border: `1px solid ${st === 'mora' ? 'rgba(255,61,61,0.25)' : '#1e1e1e'}`, borderRadius: 12, padding: '14px 14px', cursor: 'pointer' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                    <div style={{ flex: 1, paddingRight: 10 }}>
+                      <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 2 }}>{c.clientName}</div>
+                      <div style={{ fontSize: 12, color: '#555', marginBottom: 2 }}>{c.products}</div>
+                      <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#444', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <span>Tel: {c.clientPhone}</span>
+                        {c.clientDocument && <span style={{ color: '#666' }}>· CC: {c.clientDocument}</span>}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 15, fontWeight: 700, color: '#ff3d3d', marginBottom: 4 }}>{fmt(pendingBalance(c))}</div>
+                      <StatusBadge status={st} />
+                    </div>
                   </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 15, fontWeight: 700, color: '#ff3d3d', marginBottom: 4 }}>{fmt(pendingBalance(c))}</div>
-                    <StatusBadge status={st} />
+                  <ProgressBar pct={pct} color={st === 'mora' ? '#ff9800' : st === 'finalizado' ? '#448aff' : '#00e676'} />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
+                    <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#555' }}>{pct.toFixed(1)}% pagado</span>
+                    {od > 0 && <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#ff3d3d', fontWeight: 600 }}>{od} cuota{od !== 1 ? 's' : ''} vencida{od !== 1 ? 's' : ''}</span>}
+                    {od === 0 && next && st !== 'finalizado' && <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#555' }}>Próximo: {fmtShortDate(next.dueDate)}</span>}
+                    {st === 'finalizado' && <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#448aff' }}>Finalizado</span>}
                   </div>
                 </div>
-                <ProgressBar pct={pct} color={st === 'mora' ? '#ff9800' : st === 'finalizado' ? '#448aff' : '#00e676'} />
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
-                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#555' }}>{pct.toFixed(1)}% pagado</span>
-                  {od > 0 && <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#ff3d3d', fontWeight: 600 }}>{od} cuota{od !== 1 ? 's' : ''} vencida{od !== 1 ? 's' : ''}</span>}
-                  {od === 0 && next && st !== 'finalizado' && <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#555' }}>Próximo: {fmtShortDate(next.dueDate)}</span>}
-                  {st === 'finalizado' && <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#448aff' }}>Finalizado</span>}
-                </div>
-              </div>
-            )
-          })}
-        </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {showNewForm && <NewCreditModal onSave={c => { onAdd(c); setShowNewForm(false); setSelectedId(c.id) }} onClose={() => setShowNewForm(false)} />}
+      {showFinalized && (
+        <FinalizedCreditsModal
+          credits={credits}
+          onSelectCredit={setSelectedId}
+          onClose={() => setShowFinalized(false)}
+        />
+      )}
+    </div>
+  )
+}
+
+function FinalizedCreditsModal({ credits, onSelectCredit, onClose }: { credits: Credit[]; onSelectCredit: (id: string) => void; onClose: () => void }) {
+  const [search, setSearch] = useState('')
+
+  const finalized = useMemo(() => credits.filter(c => creditStatus(c) === 'finalizado'), [credits])
+
+  const filtered = useMemo(() => {
+    return finalized.filter(c => {
+      const s = search.toLowerCase()
+      const nameMatch = c.clientName.toLowerCase().includes(s)
+      const docMatch = c.clientDocument ? c.clientDocument.toLowerCase().includes(s) : false
+      return nameMatch || docMatch
+    })
+  }, [finalized, search])
+
+  return (
+    <div className="fade-in" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 50, display: 'flex', alignItems: 'flex-end' }}>
+      <div className="slide-up" style={{ background: '#0e0e0e', border: '1px solid #222', borderRadius: '20px 20px 0 0', width: '100%', maxHeight: '94vh', overflowY: 'auto', padding: '20px 16px 40px', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexShrink: 0 }}>
+          <div>
+            <div style={{ fontSize: 17, fontWeight: 600 }}>Créditos Finalizados</div>
+            <div style={{ fontSize: 12, color: '#555', marginTop: 2 }}>{finalized.length} créditos completados</div>
+          </div>
+          <button onClick={onClose} style={{ background: '#1a1a1a', border: 'none', color: '#888', borderRadius: 8, padding: 8, cursor: 'pointer', display: 'flex' }}><IconX /></button>
+        </div>
+
+        {/* Search Bar */}
+        <div style={{ position: 'relative', marginBottom: 14, flexShrink: 0 }}>
+          <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#444', display: 'flex' }}><IconSearch /></span>
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar cliente por nombre o documento…"
+            style={{ width: '100%', background: '#111', border: '1px solid #222', borderRadius: 10, padding: '10px 12px 10px 36px', color: '#f0f0f0', fontSize: 14 }}
+          />
+        </div>
+
+        {/* List */}
+        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {filtered.length === 0 ? (
+            <div style={{ textAlign: 'center', color: '#333', fontFamily: 'JetBrains Mono, monospace', fontSize: 13, paddingTop: 40 }}>
+              Sin resultados
+            </div>
+          ) : (
+            filtered.map(c => {
+              const pct = progressPct(c)
+              return (
+                <div
+                  key={c.id}
+                  onClick={() => {
+                    onSelectCredit(c.id)
+                    onClose()
+                  }}
+                  style={{ background: '#111', border: '1px solid #1e1e1e', borderRadius: 12, padding: '14px', cursor: 'pointer' }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                    <div style={{ flex: 1, paddingRight: 10 }}>
+                      <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 2 }}>{c.clientName}</div>
+                      <div style={{ fontSize: 12, color: '#555', marginBottom: 2 }}>{c.products}</div>
+                      <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#444', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <span>Tel: {c.clientPhone}</span>
+                        {c.clientDocument && <span style={{ color: '#666' }}>· CC: {c.clientDocument}</span>}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 15, fontWeight: 700, color: '#00e676', marginBottom: 4 }}>{fmt(c.totalSale)}</div>
+                      <StatusBadge status="finalizado" />
+                    </div>
+                  </div>
+                  <ProgressBar pct={pct} color="#448aff" />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
+                    <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#555' }}>100% Pagado</span>
+                    <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#448aff' }}>Finalizado</span>
+                  </div>
+                </div>
+              )
+            })
+          )}
+        </div>
+      </div>
     </div>
   )
 }
@@ -800,11 +982,15 @@ function CreditDetail({ credit, onBack, onUpdate }: { credit: Credit; onBack: ()
               <div style={{ fontSize: 14, fontWeight: 500 }}>{credit.clientName}</div>
             </div>
             <div>
+              <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: '#555', marginBottom: 2 }}>DOCUMENTO</div>
+              <div style={{ fontSize: 14, fontWeight: 500 }}>{credit.clientDocument || '—'}</div>
+            </div>
+            <div>
               <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: '#555', marginBottom: 2 }}>TELÉFONO</div>
               <div style={{ fontSize: 14, fontWeight: 500 }}>{credit.clientPhone}</div>
             </div>
             {credit.clientAddress && (
-              <div style={{ gridColumn: '1/-1' }}>
+              <div>
                 <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: '#555', marginBottom: 2 }}>DIRECCIÓN</div>
                 <div style={{ fontSize: 13, color: '#c0c0c0' }}>{credit.clientAddress}</div>
               </div>
@@ -1048,6 +1234,7 @@ function NewCreditModal({ onSave, onClose }: { onSave: (c: Credit) => void; onCl
   const [clientName, setClientName] = useState('')
   const [clientPhone, setClientPhone] = useState('')
   const [clientAddress, setClientAddress] = useState('')
+  const [clientDocument, setClientDocument] = useState('')
   const [products, setProducts] = useState('')
   const [totalSale, setTotalSale] = useState('')
   const [frequency, setFrequency] = useState<'semanal' | 'quincenal' | 'mensual'>('mensual')
@@ -1062,6 +1249,7 @@ function NewCreditModal({ onSave, onClose }: { onSave: (c: Credit) => void; onCl
     const sd = new Date(startDate + 'T00:00:00')
     const credit: Credit = {
       id: uid(), clientName: clientName.trim(), clientPhone: clientPhone.trim(), clientAddress: clientAddress.trim(),
+      clientDocument: clientDocument.trim(),
       products: products.trim(), totalSale: Number(totalSale), startDate: sd, paymentFrequency: frequency,
       totalQuotas: Number(totalQuotas), quotaValue,
       installments: generateInstallments(sd, frequency, Number(totalQuotas), quotaValue),
@@ -1080,9 +1268,10 @@ function NewCreditModal({ onSave, onClose }: { onSave: (c: Credit) => void; onCl
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <Field label="Nombre del cliente"><input value={clientName} onChange={e => setClientName(e.target.value)} placeholder="Luchy Tolu" style={inputStyle} /></Field>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field label="Documento de identidad"><input value={clientDocument} onChange={e => setClientDocument(e.target.value)} placeholder="1098765432" style={inputStyle} /></Field>
             <Field label="Teléfono"><input value={clientPhone} onChange={e => setClientPhone(e.target.value)} placeholder="300 123 4567" style={inputStyle} /></Field>
-            <Field label="Dirección"><input value={clientAddress} onChange={e => setClientAddress(e.target.value)} placeholder="Cra 5 #12-34" style={inputStyle} /></Field>
           </div>
+          <Field label="Dirección"><input value={clientAddress} onChange={e => setClientAddress(e.target.value)} placeholder="Cra 5 #12-34" style={inputStyle} /></Field>
           <Field label="Producto(s)"><input value={products} onChange={e => setProducts(e.target.value)} placeholder="Televisor, Colchón base cama…" style={inputStyle} /></Field>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <Field label="Total venta">
@@ -1134,6 +1323,7 @@ export default function App() {
 
   const handleAddProduct = (p: Product) => setProducts(prev => [...prev, p])
   const handleUpdateProduct = (p: Product) => setProducts(prev => prev.map(x => x.id === p.id ? p : x))
+  const handleDeleteProduct = (id: string) => setProducts(prev => prev.filter(x => x.id !== id))
   const handleAddSale = (sale: Sale) => {
     setSales(prev => [...prev, sale])
     setProducts(prev => prev.map(p => { const l = sale.lines.find(l => l.productId === p.id); return l ? { ...p, stock: Math.max(0, p.stock - l.qty) } : p }))
@@ -1166,7 +1356,7 @@ export default function App() {
       {/* Content */}
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         {tab === 'dashboard' && <DashboardTab products={products} sales={sales} credits={credits} />}
-        {tab === 'inventory' && <InventoryTab products={products} onAdd={handleAddProduct} onUpdate={handleUpdateProduct} />}
+        {tab === 'inventory' && <InventoryTab products={products} onAdd={handleAddProduct} onUpdate={handleUpdateProduct} onDelete={handleDeleteProduct} />}
         {tab === 'credit' && <CreditTab credits={credits} onAdd={handleAddCredit} onUpdate={handleUpdateCredit} />}
         {tab === 'sales' && <SalesTab sales={sales} />}
       </div>
