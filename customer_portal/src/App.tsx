@@ -524,7 +524,7 @@ export function App() {
                                       {formatCurrency(inst.amount)}
                                     </td>
                                     <td className="py-3 px-3.5">
-                                      {inst.is_paid ? (
+                                      {inst.is_paid || isPaidFull ? (
                                         <span className="inline-flex items-center gap-1 font-extrabold text-[#047857] bg-[#E6F7F0] px-2.5 py-0.5 rounded-md border border-[#A7F3D0] text-[11px]">
                                           <CheckCircle2 className="w-3 h-3" /> Pagado
                                         </span>
