@@ -1,16 +1,43 @@
-# alfa_gama_store_erp
+# Alfa Gama Store ERP (Inventory and Sales App)
 
-A new Flutter project.
+Este es un sistema integral de punto de venta (POS) y ERP desarrollado con **Flutter** para la gestión eficiente de Alfa Gama Store.
 
-## Getting Started
+## Características Principales
 
-This project is a starting point for a Flutter application.
+La aplicación cuenta con una arquitectura modular enfocada en funcionalidades clave para la operación del negocio:
 
-A few resources to get you started if this is your first Flutter project:
+- 🔐 **Autenticación (Auth)**: Gestión segura de acceso para usuarios del sistema.
+- 📊 **Panel Principal (Dashboard)**: Vista general con métricas importantes y accesos rápidos.
+- 📦 **Inventario (Inventory)**: Control detallado de productos, existencias y movimientos.
+- 🛒 **Ventas (Sales)**: Procesamiento de transacciones, carrito de compras y facturación.
+- 👥 **Clientes (Customers)**: Registro y seguimiento de la base de clientes.
+- 💳 **Créditos (Credits)**: Gestión de cuentas por cobrar y financiamientos de clientes.
+- 💵 **Turnos de Caja (Cash Shift)**: Control de apertura, cierres y movimientos de efectivo.
+- 📈 **Reportes (Reports)**: Generación de estadísticas y reportes de rendimiento.
+- ⚙️ **Configuración (Settings)**: Ajustes generales de la aplicación y del negocio.
+- 👤 **Usuarios (Users)**: Administración de roles y permisos para el personal.
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+## Requisitos Previos
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Antes de ejecutar este proyecto, asegúrate de tener instalado:
+- [Flutter SDK](https://docs.flutter.dev/get-started/install)
+- [Dart SDK](https://dart.dev/get-dart)
+- Un entorno de desarrollo (Android Studio, VS Code, etc.)
+
+## Primeros Pasos
+
+Para ejecutar el proyecto localmente, sigue estos pasos:
+
+1. Clona este repositorio.
+2. Instala las dependencias del proyecto ejecutando:
+   ```bash
+   flutter pub get
+   ```
+3. Ejecuta la aplicación en tu dispositivo o emulador:
+   ```bash
+   flutter run
+   ```
+
+## Estructura del Proyecto
+
+El código fuente principal se encuentra en la carpeta `lib/`, la cual sigue una arquitectura basada en características (`features`). Cada módulo dentro de `lib/features/` contiene su propia lógica de presentación, dominio y datos.
