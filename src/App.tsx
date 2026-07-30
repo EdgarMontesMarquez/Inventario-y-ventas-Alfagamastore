@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import logoImg from '@/imports/logo_compact.png'
+import { jsPDF } from 'jspdf'
+import autoTable from 'jspdf-autotable'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -81,6 +83,222 @@ function generateInstallments(
     else due.setMonth(startDate.getMonth() + (i + 1))
     return { quotaNumber: i + 1, dueDate: due, quotaValue, paidAmount: 0, paidDate: null, paymentMethod: '', notes: '' }
   })
+}
+
+const ensureDate = (d: any): Date => {
+  if (d instanceof Date) return d
+  return new Date(d)
+}
+
+function exportToPDF(credit: Credit) {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4'
+  })
+
+  doc.setFont('helvetica')
+
+  // Banner cabecera institucional
+  doc.setFillColor(13, 26, 51)
+  doc.rect(15, 15, 180, 22, 'F')
+
+  // Nombre de la marca
+  doc.setTextColor(255, 255, 255)
+  doc.setFontSize(14)
+  doc.setFont('helvetica', 'bold')
+  doc.text('ALFA GAMA STORE', 20, 24)
+
+  // Eslogan
+  doc.setFontSize(9)
+  doc.setFont('helvetica', 'italic')
+  doc.text('Moda, Calidad y Estilo', 20, 29)
+
+  // Tipo de documento y fecha
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(8)
+  doc.setTextColor(170, 190, 230)
+  doc.text('EXTRACTO DE CUENTA DE CRÉDITO', 130, 24)
+  doc.text(`Fecha Emisión: ${fmtDate(new Date())}`, 130, 29)
+
+  doc.setTextColor(34, 34, 34)
+
+  // Título: Datos del Cliente
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(10)
+  doc.setTextColor(13, 26, 51)
+  doc.text('DATOS DEL CLIENTE', 15, 47)
+
+  // Caja de datos del cliente
+  doc.setDrawColor(220, 220, 220)
+  doc.setFillColor(250, 250, 250)
+  doc.rect(15, 50, 180, 32, 'FD')
+
+  doc.setFontSize(8)
+  doc.setFont('helvetica', 'bold')
+  doc.text('NOMBRE:', 20, 56)
+  doc.setFont('helvetica', 'normal')
+  doc.text(credit.clientName, 45, 56)
+
+  doc.setFont('helvetica', 'bold')
+  doc.text('DOCUMENTO (CC):', 110, 56)
+  doc.setFont('helvetica', 'normal')
+  doc.text(credit.clientDocument || '-', 145, 56)
+
+  doc.setFont('helvetica', 'bold')
+  doc.text('TELÉFONO:', 20, 63)
+  doc.setFont('helvetica', 'normal')
+  doc.text(credit.clientPhone, 45, 63)
+
+  doc.setFont('helvetica', 'bold')
+  doc.text('FECHA REGISTRO:', 110, 63)
+  doc.setFont('helvetica', 'normal')
+  doc.text(fmtDate(ensureDate(credit.startDate)), 145, 63)
+
+  if (credit.clientAddress) {
+    doc.setFont('helvetica', 'bold')
+    doc.text('DIRECCIÓN:', 20, 70)
+    doc.setFont('helvetica', 'normal')
+    doc.text(credit.clientAddress, 45, 70)
+  }
+
+  doc.setFont('helvetica', 'bold')
+  doc.text('PRODUCTO(S):', 20, 77)
+  doc.setFont('helvetica', 'normal')
+  doc.text(credit.products, 45, 77)
+
+  // Título: Resumen de la Cuenta
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(10)
+  doc.setTextColor(13, 26, 51)
+  doc.text('RESUMEN DE LA CUENTA', 15, 92)
+
+  const paid = totalPaid(credit)
+  const pending = pendingBalance(credit)
+  const pct = progressPct(credit)
+
+  // Tarjeta 1: Total Venta
+  doc.setFillColor(245, 245, 245)
+  doc.rect(15, 95, 56, 18, 'F')
+  doc.setFontSize(7)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(100, 100, 100)
+  doc.text('TOTAL VENTA', 20, 100)
+  doc.setFontSize(11)
+  doc.setTextColor(34, 34, 34)
+  doc.text(fmt(credit.totalSale), 20, 107)
+
+  // Tarjeta 2: Abonado
+  doc.setFillColor(230, 248, 240)
+  doc.rect(77, 95, 56, 18, 'F')
+  doc.setFontSize(7)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(0, 150, 80)
+  doc.text('ABONADO', 82, 100)
+  doc.setFontSize(11)
+  doc.setTextColor(0, 180, 90)
+  doc.text(fmt(paid), 82, 107)
+
+  // Tarjeta 3: Saldo Pendiente
+  doc.setFillColor(255, 240, 240)
+  doc.rect(139, 95, 56, 18, 'F')
+  doc.setFontSize(7)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(200, 50, 50)
+  doc.text('SALDO PENDIENTE', 144, 100)
+  doc.setFontSize(11)
+  doc.setTextColor(230, 50, 50)
+  doc.text(fmt(pending), 144, 107)
+
+  // Detalles adicionales
+  doc.setFontSize(8)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(80, 80, 80)
+  doc.text(`Valor Cuota: ${fmt(credit.quotaValue)}`, 15, 120)
+  doc.text(`Frecuencia: ${FREQ_LABELS[credit.paymentFrequency]}`, 77, 120)
+  doc.text(`Total Cuotas: ${credit.totalQuotas}`, 139, 120)
+  doc.text(`Estado del Crédito: ${creditStatus(credit) === 'finalizado' ? 'Finalizado' : creditStatus(credit) === 'mora' ? 'En Mora' : 'Al Día'} (${pct.toFixed(1)}% pagado)`, 15, 126)
+
+  // Título: Plan de Pagos
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(10)
+  doc.setTextColor(13, 26, 51)
+  doc.text('PLAN DE PAGOS (DETALLE DE CUOTAS)', 15, 137)
+
+  let runningBal = credit.totalSale
+  const rows = credit.installments.map(inst => {
+    runningBal -= inst.paidAmount
+    return { inst, balance: Math.max(0, runningBal) }
+  })
+
+  autoTable(doc, {
+    startY: 140,
+    margin: { left: 15, right: 15 },
+    head: [['N°', 'Vencimiento', 'Cuota', 'Abono', 'Saldo', 'Estado', 'Método/Obs.']],
+    body: rows.map(r => [
+      r.inst.quotaNumber.toString(),
+      fmtDate(ensureDate(r.inst.dueDate)),
+      fmt(r.inst.quotaValue),
+      r.inst.paidAmount > 0 ? fmt(r.inst.paidAmount) : '-',
+      fmt(r.balance),
+      instStatus(r.inst).toUpperCase(),
+      r.inst.paymentMethod || r.inst.notes || '-'
+    ]),
+    styles: {
+      font: 'helvetica',
+      fontSize: 8,
+      cellPadding: 2,
+    },
+    headStyles: {
+      fillColor: [13, 26, 51],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+    },
+    alternateRowStyles: {
+      fillColor: [248, 249, 250],
+    },
+    columnStyles: {
+      0: { cellWidth: 8 },
+      1: { cellWidth: 24 },
+      2: { cellWidth: 24 },
+      3: { cellWidth: 24 },
+      4: { cellWidth: 24 },
+      5: { cellWidth: 22 },
+      6: { cellWidth: 'auto' },
+    }
+  })
+
+  let finalY = (doc as any).lastAutoTable.finalY || 140
+  if (credit.generalNotes) {
+    if (finalY + 25 > 280) {
+      doc.addPage()
+      finalY = 15
+    }
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9)
+    doc.setTextColor(13, 26, 51)
+    doc.text('OBSERVACIONES GENERALES', 15, finalY + 10)
+
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8.5)
+    doc.setTextColor(80, 80, 80)
+    const splitNotes = doc.splitTextToSize(credit.generalNotes, 180)
+    doc.text(splitNotes, 15, finalY + 15)
+    finalY += 10 + (splitNotes.length * 4)
+  }
+
+  const pageCount = (doc as any).internal.getNumberOfPages()
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i)
+    doc.setFont('helvetica', 'italic')
+    doc.setFontSize(8)
+    doc.setTextColor(180, 180, 180)
+    doc.text('"Tu estilo, nuestra pasión"', 105, 287, { align: 'center' })
+    doc.text(`Página ${i} de ${pageCount}`, 195, 287, { align: 'right' })
+  }
+
+  const filename = `Extracto_Credito_${credit.clientName.replace(/\s+/g, '_')}.pdf`
+  doc.save(filename)
 }
 
 // ─── Seed data ────────────────────────────────────────────────────────────────
@@ -1065,6 +1283,14 @@ function CreditDetail({ credit, onBack, onUpdate }: { credit: Credit; onBack: ()
             <IconCheck /> Registrar pago
           </button>
         )}
+
+        {/* Compartir Extracto PDF */}
+        <button onClick={() => exportToPDF(credit)} style={{ width: '100%', background: '#1a1a1a', border: '1px solid #222', color: '#00e676', borderRadius: 12, padding: '13px', fontSize: 14, fontWeight: 700, cursor: 'pointer', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'all 0.2s' }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+          </svg>
+          Compartir Extracto (PDF)
+        </button>
 
         {/* Payment plan table */}
         <div style={{ background: '#111', border: '1px solid #1e1e1e', borderRadius: 12, overflow: 'hidden', marginBottom: 14 }}>

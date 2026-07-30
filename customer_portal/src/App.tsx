@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
 import type { Credit, Customer } from './types';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { 
   Search, 
   CreditCard, 
@@ -17,6 +19,248 @@ import {
   ExternalLink,
   UserCheck
 } from 'lucide-react';
+
+function exportCustomerCreditToPDF(credit: Credit) {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4'
+  });
+
+  doc.setFont('helvetica');
+
+  // Banner cabecera institucional
+  doc.setFillColor(13, 26, 51);
+  doc.rect(15, 15, 180, 22, 'F');
+
+  // Nombre de la marca
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.text('ALFA GAMA STORE', 20, 24);
+
+  // Eslogan
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'italic');
+  doc.text('Moda, Calidad y Estilo', 20, 29);
+
+  // Tipo de documento y fecha
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(170, 190, 230);
+  doc.text('EXTRACTO DE CUENTA DE CRÉDITO', 130, 24);
+  doc.text(`Fecha Emisión: ${new Date().toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' })}`, 130, 29);
+
+  doc.setTextColor(34, 34, 34);
+
+  // Título: Datos del Cliente
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(13, 26, 51);
+  doc.text('DATOS DEL CLIENTE', 15, 47);
+
+  // Caja de datos del cliente
+  doc.setDrawColor(220, 220, 220);
+  doc.setFillColor(250, 250, 250);
+  doc.rect(15, 50, 180, 32, 'FD');
+
+  const fmtD = (dtStr: string) => {
+    if (!dtStr) return '-';
+    const d = new Date(dtStr);
+    return d.toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  };
+  const fmtC = (val: number) => {
+    return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(val);
+  };
+
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.text('NOMBRE:', 20, 56);
+  doc.setFont('helvetica', 'normal');
+  doc.text(credit.customer_name || '—', 45, 56);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('CC/NIT:', 110, 56);
+  doc.setFont('helvetica', 'normal');
+  let docIdToPrint = '-';
+  if (credit.notes && credit.notes.includes('Documento:')) {
+    docIdToPrint = credit.notes.split('|')[0].replace('Documento:', '').trim();
+  }
+  doc.text(docIdToPrint, 145, 56);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('TELÉFONO:', 20, 63);
+  doc.setFont('helvetica', 'normal');
+  doc.text(credit.customer_phone || '-', 45, 63);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('FECHA REGISTRO:', 110, 63);
+  doc.setFont('helvetica', 'normal');
+  doc.text(fmtD(credit.created_at), 145, 63);
+
+  if (credit.customer_address) {
+    doc.setFont('helvetica', 'bold');
+    doc.text('DIRECCIÓN:', 20, 70);
+    doc.setFont('helvetica', 'normal');
+    doc.text(credit.customer_address, 45, 70);
+  }
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('PRODUCTO(S):', 20, 77);
+  doc.setFont('helvetica', 'normal');
+  doc.text(credit.products || '-', 45, 77);
+
+  // Título: Resumen de la Cuenta
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(13, 26, 51);
+  doc.text('RESUMEN DE LA CUENTA', 15, 92);
+
+  const pending = Math.max(0, credit.total_amount - credit.paid_amount);
+  const pct = credit.total_amount > 0 ? Math.min(100, (credit.paid_amount / credit.total_amount) * 100) : 0;
+  const isPaidFull = pending <= 0 || credit.status === 'finalizado';
+  const isMora = credit.status === 'mora';
+  
+  const quotaVal = credit.installments && credit.installments.length > 0
+    ? credit.installments[0].amount
+    : Math.ceil(credit.total_amount / (credit.installments_count || 1));
+
+  // Tarjeta 1: Total Venta
+  doc.setFillColor(245, 245, 245);
+  doc.rect(15, 95, 56, 18, 'F');
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(100, 100, 100);
+  doc.text('TOTAL VENTA', 20, 100);
+  doc.setFontSize(11);
+  doc.setTextColor(34, 34, 34);
+  doc.text(fmtC(credit.total_amount), 20, 107);
+
+  // Tarjeta 2: Abonado
+  doc.setFillColor(230, 248, 240);
+  doc.rect(77, 95, 56, 18, 'F');
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(0, 150, 80);
+  doc.text('ABONADO', 82, 100);
+  doc.setFontSize(11);
+  doc.setTextColor(0, 180, 90);
+  doc.text(fmtC(credit.paid_amount), 82, 107);
+
+  // Tarjeta 3: Saldo Pendiente
+  doc.setFillColor(255, 240, 240);
+  doc.rect(139, 95, 56, 18, 'F');
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(200, 50, 50);
+  doc.text('SALDO PENDIENTE', 144, 100);
+  doc.setFontSize(11);
+  doc.setTextColor(230, 50, 50);
+  doc.text(fmtC(pending), 144, 107);
+
+  // Detalles adicionales
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(80, 80, 80);
+  doc.text(`Valor Cuota: ${fmtC(quotaVal)}`, 15, 120);
+  doc.text(`Frecuencia: ${credit.payment_frequency.toUpperCase()}`, 77, 120);
+  doc.text(`Total Cuotas: ${credit.installments_count}`, 139, 120);
+  doc.text(`Estado del Crédito: ${isPaidFull ? 'Finalizado' : isMora ? 'En Mora' : 'Al Día'} (${pct.toFixed(1)}% pagado)`, 15, 126);
+
+  // Título: Plan de Pagos
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(13, 26, 51);
+  doc.text('PLAN DE PAGOS (DETALLE DE CUOTAS)', 15, 137);
+
+  let runningBal = credit.total_amount;
+  const rows = (credit.installments || []).map(inst => {
+    runningBal -= inst.paid_amount;
+    return { inst, balance: Math.max(0, runningBal) };
+  });
+
+  const getStatusText = (inst: any) => {
+    if (inst.is_paid || inst.paid_amount >= inst.amount) return 'PAGADO';
+    if (inst.paid_amount > 0) return 'PARCIAL';
+    if (inst.due_date && new Date(inst.due_date) < new Date()) return 'VENCIDO';
+    return 'PENDIENTE';
+  };
+
+  autoTable(doc, {
+    startY: 140,
+    margin: { left: 15, right: 15 },
+    head: [['N°', 'Vencimiento', 'Cuota', 'Abono', 'Saldo', 'Estado', 'Método/Obs.']],
+    body: rows.map(r => [
+      r.inst.number.toString(),
+      fmtD(r.inst.due_date),
+      fmtC(r.inst.amount),
+      r.inst.paid_amount > 0 ? fmtC(r.inst.paid_amount) : '-',
+      fmtC(r.balance),
+      getStatusText(r.inst),
+      r.inst.payment_method || r.inst.notes || '-'
+    ]),
+    styles: {
+      font: 'helvetica',
+      fontSize: 8,
+      cellPadding: 2,
+    },
+    headStyles: {
+      fillColor: [13, 26, 51],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+    },
+    alternateRowStyles: {
+      fillColor: [248, 249, 250],
+    },
+    columnStyles: {
+      0: { cellWidth: 8 },
+      1: { cellWidth: 24 },
+      2: { cellWidth: 24 },
+      3: { cellWidth: 24 },
+      4: { cellWidth: 24 },
+      5: { cellWidth: 22 },
+      6: { cellWidth: 'auto' },
+    }
+  });
+
+  let finalY = (doc as any).lastAutoTable.finalY || 140;
+  let notesToPrint = credit.notes || '';
+  if (notesToPrint.includes('|')) {
+    const parts = notesToPrint.split('|');
+    notesToPrint = parts.length > 2 ? parts.slice(2).join('|').trim() : '';
+  }
+
+  if (notesToPrint) {
+    if (finalY + 25 > 280) {
+      doc.addPage();
+      finalY = 15;
+    }
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(13, 26, 51);
+    doc.text('OBSERVACIONES GENERALES', 15, finalY + 10);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(80, 80, 80);
+    const splitNotes = doc.splitTextToSize(notesToPrint, 180);
+    doc.text(splitNotes, 15, finalY + 15);
+    finalY += 10 + (splitNotes.length * 4);
+  }
+
+  const pageCount = (doc as any).internal.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(8);
+    doc.setTextColor(180, 180, 180);
+    doc.text('"Tu estilo, nuestra pasión"', 105, 287, { align: 'center' });
+    doc.text(`Página ${i} de ${pageCount}`, 195, 287, { align: 'right' });
+  }
+
+  const filename = `Extracto_Credito_${credit.customer_name.replace(/\s+/g, '_')}.pdf`;
+  doc.save(filename);
+}
 
 export function App() {
   const [docType, setDocType] = useState<string>('CC');
@@ -60,34 +304,21 @@ export function App() {
       // 1. Consulta filtrada de clientes en public.customers
       let foundCustomer: Customer | null = null;
       try {
-        let filterOr = `document_id.eq.${cleanId},document_id.ilike.%${cleanId}%,phone.ilike.%${cleanId}%`;
-        if (cleanId.length >= 3) {
-          filterOr += `,name.ilike.%${cleanId}%`;
-        }
-
         const { data: matchedCustomers, error: custError } = await supabase
           .from('customers')
           .select('*')
-          .or(filterOr);
+          .or(`document_id.eq.${cleanId},document_id.ilike.%${cleanId}%`);
 
         if (custError) {
           console.warn('Advertencia en customers:', custError.message);
         }
 
         if (matchedCustomers && matchedCustomers.length > 0) {
+          // Exigir coincidencia exacta del documento limpio
           const match = matchedCustomers.find((c: any) => {
             const doc = String(c.document_id || '').replace(/[^a-zA-Z0-9]/g, '');
-            const phone = String(c.phone || '').replace(/[^a-zA-Z0-9]/g, '');
-            const name = String(c.name || '').toLowerCase();
-            return (
-              doc === cleanId || 
-              doc.includes(cleanId) || 
-              cleanId.includes(doc) || 
-              phone === cleanId || 
-              phone.includes(cleanId) || 
-              (cleanId.length >= 3 && name.includes(cleanId.toLowerCase()))
-            );
-          }) || matchedCustomers[0];
+            return doc === cleanId;
+          });
 
           if (match) {
             foundCustomer = {
@@ -105,19 +336,18 @@ export function App() {
         console.warn('Excepción consulta customers:', e);
       }
 
-      // 2. Consulta filtrada de créditos en public.credits
-      let credFilterOr = `notes.ilike.%${cleanId}%,customer_phone.ilike.%${cleanId}%`;
-      if (foundCustomer) {
-        credFilterOr = `customer_id.eq.${foundCustomer.id},${credFilterOr}`;
-        if (foundCustomer.name) {
-          credFilterOr += `,customer_name.ilike.%${foundCustomer.name}%`;
-        }
+      // Si no se encuentra el cliente con coincidencia exacta, se detiene la búsqueda y se muestra error
+      if (!foundCustomer) {
+        setErrorMsg('No se encontró ningún cliente registrado con el número de documento ingresado.');
+        setLoading(false);
+        return;
       }
 
+      // 2. Consulta filtrada de créditos en public.credits
       const { data: matchedCredits, error: credErr } = await supabase
         .from('credits')
         .select('*')
-        .or(credFilterOr);
+        .or(`customer_id.eq.${foundCustomer.id},customer_phone.eq.${foundCustomer.phone}`);
 
       if (credErr) {
         console.error('Error cargando créditos de Supabase:', credErr);
@@ -130,22 +360,19 @@ export function App() {
 
       if (matchedCredits && matchedCredits.length > 0) {
         rawCredits = matchedCredits.filter((c: any) => {
-          const notesStr = String(c.notes || '');
-          const cleanNotes = notesStr.replace(/[^a-zA-Z0-9]/g, '');
           const custIdStr = String(c.customer_id || '');
           const phoneStr = String(c.customer_phone || '').replace(/[^a-zA-Z0-9]/g, '');
-          const nameStr = String(c.customer_name || '').toLowerCase();
+          const cleanCustPhone = String(foundCustomer?.phone || '').replace(/[^a-zA-Z0-9]/g, '');
 
-          const matchByCustId = foundCustomer ? custIdStr === foundCustomer.id : false;
-          const matchByNotes = notesStr.includes(rawSearch) || cleanNotes.includes(cleanId) || notesStr.includes(cleanId);
-          const matchByPhone = phoneStr.includes(cleanId);
-          const matchByName = foundCustomer ? nameStr.includes(foundCustomer.name.toLowerCase()) : false;
+          const matchByCustId = custIdStr === foundCustomer?.id;
+          const matchByPhone = cleanCustPhone && phoneStr === cleanCustPhone;
 
-          return matchByCustId || matchByNotes || matchByPhone || matchByName;
+          return matchByCustId || matchByPhone;
         });
       }
 
       if (rawCredits.length === 0) {
+        setErrorMsg('No se encontraron créditos registrados para este cliente.');
         setLoading(false);
         return;
       }
@@ -439,13 +666,24 @@ export function App() {
                         </p>
                       </div>
 
-                      <div className="sm:text-right">
-                        <span className="text-[10px] font-bold text-[#475569] uppercase tracking-wider block">SALDO PENDIENTE</span>
-                        <span className={`font-heading font-extrabold text-2xl font-mono-finance ${
-                          pendingBalance > 0 ? 'text-[#0066FF]' : 'text-[#10B981]'
-                        }`}>
-                          {formatCurrency(pendingBalance)}
-                        </span>
+                      <div className="flex items-center gap-4 self-end sm:self-auto">
+                        <div className="sm:text-right">
+                          <span className="text-[10px] font-bold text-[#475569] uppercase tracking-wider block">SALDO PENDIENTE</span>
+                          <span className={`font-heading font-extrabold text-2xl font-mono-finance ${
+                            pendingBalance > 0 ? 'text-[#0066FF]' : 'text-[#10B981]'
+                          }`}>
+                            {formatCurrency(pendingBalance)}
+                          </span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => exportCustomerCreditToPDF(credit)}
+                          className="bg-white hover:bg-[#F4F7FF] text-[#0066FF] border border-[#BFDBFE] font-bold text-xs px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 active:scale-95 shadow-sm cursor-pointer shrink-0"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          <span>Descargar PDF</span>
+                        </button>
                       </div>
                     </div>
 

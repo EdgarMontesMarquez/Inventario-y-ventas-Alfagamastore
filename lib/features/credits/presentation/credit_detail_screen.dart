@@ -19,6 +19,9 @@ import '../../../shared/widgets/image_viewer_modal.dart';
 import '../../../shared/providers/repository_providers.dart';
 import '../../../shared/models/credit.dart';
 import '../../../core/utils/currency_formatter.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 class CreditDetailScreen extends ConsumerWidget {
   final String creditId;
@@ -45,6 +48,382 @@ class CreditDetailScreen extends ConsumerWidget {
           }
         },
       ),
+    );
+  }
+
+  Future<void> _shareCreditPDF(BuildContext context, Credit credit) async {
+    final pdf = pw.Document();
+    final df = DateFormat('dd/MM/yyyy');
+    final cf = NumberFormat.currency(locale: 'es_CO', symbol: '\$', decimalDigits: 0);
+
+    double runningBal = credit.totalSale.toDouble();
+    final List<Map<String, dynamic>> rows = [];
+    for (var inst in credit.installments) {
+      runningBal -= inst.paidAmount;
+      rows.add({
+        'inst': inst,
+        'balance': runningBal.clamp(0.0, double.infinity),
+      });
+    }
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(20),
+        build: (pw.Context context) {
+          return [
+            // Cabecera institucional
+            pw.Container(
+              padding: const pw.EdgeInsets.all(12),
+              decoration: const pw.BoxDecoration(
+                color: PdfColor.fromInt(0x0D1A33),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        'ALFA GAMA STORE',
+                        style: pw.TextStyle(
+                          color: PdfColors.white,
+                          fontSize: 16,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                      pw.Text(
+                        'Moda, Calidad y Estilo',
+                        style: pw.TextStyle(
+                          color: PdfColors.grey300,
+                          fontSize: 10,
+                          fontStyle: pw.FontStyle.italic,
+                        ),
+                      ),
+                    ],
+                  ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text(
+                        'EXTRACTO DE CUENTA DE CRÉDITO',
+                        style: pw.TextStyle(
+                          color: PdfColors.white,
+                          fontSize: 9,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                      pw.Text(
+                        'Fecha Emisión: ${df.format(DateTime.now())}',
+                        style: pw.TextStyle(
+                          color: PdfColors.grey300,
+                          fontSize: 8,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 15),
+
+            // Título Datos del Cliente
+            pw.Text(
+              'DATOS DEL CLIENTE',
+              style: pw.TextStyle(
+                color: const PdfColor.fromInt(0x0D1A33),
+                fontSize: 11,
+                fontWeight: pw.FontWeight.bold,
+              ),
+            ),
+            pw.SizedBox(height: 5),
+
+            // Caja Datos Cliente
+            pw.Container(
+              padding: const pw.EdgeInsets.all(10),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.grey300),
+                color: PdfColors.grey50,
+              ),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Row(
+                    children: [
+                      pw.Expanded(
+                        child: pw.RichText(
+                          text: pw.TextSpan(
+                            children: [
+                              pw.TextSpan(text: 'NOMBRE: ', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColors.black)),
+                              pw.TextSpan(text: credit.clientName, style: pw.TextStyle(fontSize: 9, color: PdfColors.black)),
+                            ],
+                          ),
+                        ),
+                      ),
+                      pw.Expanded(
+                        child: pw.RichText(
+                          text: pw.TextSpan(
+                            children: [
+                              pw.TextSpan(text: 'CC/NIT: ', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColors.black)),
+                              pw.TextSpan(text: credit.generalNotes.contains('Documento:') 
+                                ? credit.generalNotes.split('|')[0].replaceAll('Documento:', '').trim()
+                                : '-', style: pw.TextStyle(fontSize: 9, color: PdfColors.black)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  pw.SizedBox(height: 6),
+                  pw.Row(
+                    children: [
+                      pw.Expanded(
+                        child: pw.RichText(
+                          text: pw.TextSpan(
+                            children: [
+                              pw.TextSpan(text: 'TELÉFONO: ', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColors.black)),
+                              pw.TextSpan(text: credit.clientPhone, style: pw.TextStyle(fontSize: 9, color: PdfColors.black)),
+                            ],
+                          ),
+                        ),
+                      ),
+                      pw.Expanded(
+                        child: pw.RichText(
+                          text: pw.TextSpan(
+                            children: [
+                              pw.TextSpan(text: 'REGISTRO: ', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColors.black)),
+                              pw.TextSpan(text: df.format(credit.startDate), style: pw.TextStyle(fontSize: 9, color: PdfColors.black)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (credit.clientAddress.isNotEmpty) ...[
+                    pw.SizedBox(height: 6),
+                    pw.RichText(
+                      text: pw.TextSpan(
+                        children: [
+                          pw.TextSpan(text: 'DIRECCIÓN: ', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColors.black)),
+                          pw.TextSpan(text: credit.clientAddress, style: pw.TextStyle(fontSize: 9, color: PdfColors.black)),
+                        ],
+                      ),
+                    ),
+                  ],
+                  pw.SizedBox(height: 6),
+                  pw.RichText(
+                    text: pw.TextSpan(
+                      children: [
+                        pw.TextSpan(text: 'PRODUCTO(S): ', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColors.black)),
+                        pw.TextSpan(text: credit.products, style: pw.TextStyle(fontSize: 9, color: PdfColors.black)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 15),
+
+            // Resumen de la Cuenta
+            pw.Text(
+              'RESUMEN DE LA CUENTA',
+              style: pw.TextStyle(
+                color: const PdfColor.fromInt(0x0D1A33),
+                fontSize: 11,
+                fontWeight: pw.FontWeight.bold,
+              ),
+            ),
+            pw.SizedBox(height: 5),
+
+            pw.Row(
+              children: [
+                pw.Expanded(
+                  child: pw.Container(
+                    padding: const pw.EdgeInsets.all(8),
+                    color: PdfColors.grey100,
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text('TOTAL VENTA', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600, fontWeight: pw.FontWeight.bold)),
+                        pw.SizedBox(height: 2),
+                        pw.Text(cf.format(credit.totalSale), style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                ),
+                pw.SizedBox(width: 10),
+                pw.Expanded(
+                  child: pw.Container(
+                    padding: const pw.EdgeInsets.all(8),
+                    color: const PdfColor.fromInt(0xE6F8F0),
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text('ABONADO', style: pw.TextStyle(fontSize: 8, color: const PdfColor.fromInt(0x00A854), fontWeight: pw.FontWeight.bold)),
+                        pw.SizedBox(height: 2),
+                        pw.Text(cf.format(credit.totalPaid), style: pw.TextStyle(fontSize: 12, color: const PdfColor.fromInt(0x00A854), fontWeight: pw.FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                ),
+                pw.SizedBox(width: 10),
+                pw.Expanded(
+                  child: pw.Container(
+                    padding: const pw.EdgeInsets.all(8),
+                    color: const PdfColor.fromInt(0xFFF0F0),
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text('SALDO PENDIENTE', style: pw.TextStyle(fontSize: 8, color: const PdfColor.fromInt(0xCC3333), fontWeight: pw.FontWeight.bold)),
+                        pw.SizedBox(height: 2),
+                        pw.Text(cf.format(credit.pendingBalance), style: pw.TextStyle(fontSize: 12, color: const PdfColor.fromInt(0xCC3333), fontWeight: pw.FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 10),
+
+            // Términos del Crédito Text
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text('Valor Cuota: ${cf.format(credit.quotaValue)}', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
+                pw.Text('Frecuencia: ${credit.paymentFrequency.toUpperCase()}', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
+                pw.Text('Total Cuotas: ${credit.totalQuotas}', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
+                pw.Text('Progreso: ${credit.progressPercentage.toStringAsFixed(1)}%', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
+              ],
+            ),
+            pw.SizedBox(height: 15),
+
+            // Título Plan de Pagos
+            pw.Text(
+              'PLAN DE PAGOS (DETALLE DE CUOTAS)',
+              style: pw.TextStyle(
+                color: const PdfColor.fromInt(0x0D1A33),
+                fontSize: 11,
+                fontWeight: pw.FontWeight.bold,
+              ),
+            ),
+            pw.SizedBox(height: 5),
+
+            // Tabla Plan de Pagos
+            pw.Table(
+              border: pw.TableBorder.all(color: PdfColors.grey200, width: 0.5),
+              children: [
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(
+                    color: PdfColor.fromInt(0x0D1A33),
+                  ),
+                  children: [
+                    for (var header in ['N°', 'Vencimiento', 'Cuota', 'Abono', 'Saldo', 'Estado', 'Obs.'])
+                      pw.Container(
+                        padding: const pw.EdgeInsets.all(4),
+                        alignment: pw.Alignment.centerLeft,
+                        child: pw.Text(
+                          header,
+                          style: pw.TextStyle(
+                            color: PdfColors.white,
+                            fontSize: 8,
+                            fontWeight: pw.FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                for (var r in rows)
+                  pw.TableRow(
+                    decoration: pw.BoxDecoration(
+                      color: r['inst'].quotaNumber % 2 == 0 ? PdfColors.grey50 : PdfColors.white,
+                    ),
+                    children: [
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(4),
+                        child: pw.Text(r['inst'].quotaNumber.toString(), style: const pw.TextStyle(fontSize: 7.5)),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(4),
+                        child: pw.Text(df.format(r['inst'].dueDate), style: const pw.TextStyle(fontSize: 7.5)),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(4),
+                        child: pw.Text(cf.format(r['inst'].quotaValue), style: const pw.TextStyle(fontSize: 7.5)),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(4),
+                        child: pw.Text(r['inst'].paidAmount > 0 ? cf.format(r['inst'].paidAmount) : '-', style: const pw.TextStyle(fontSize: 7.5)),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(4),
+                        child: pw.Text(cf.format(r['balance']), style: const pw.TextStyle(fontSize: 7.5)),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(4),
+                        child: pw.Text(
+                          r['inst'].paidAmount >= r['inst'].quotaValue ? 'PAGADO' : (r['inst'].paidAmount > 0 ? 'PARCIAL' : (r['inst'].dueDate.isBefore(DateTime.now()) ? 'VENCIDO' : 'PENDIENTE')), 
+                          style: pw.TextStyle(
+                            fontSize: 7, 
+                            fontWeight: pw.FontWeight.bold,
+                            color: r['inst'].paidAmount >= r['inst'].quotaValue ? PdfColors.green : (r['inst'].paidAmount > 0 ? PdfColors.orange : (r['inst'].dueDate.isBefore(DateTime.now()) ? PdfColors.red : PdfColors.grey700))
+                          )
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(4),
+                        child: pw.Text(r['inst'].paymentMethod.isNotEmpty ? r['inst'].paymentMethod : (r['inst'].notes.isNotEmpty ? r['inst'].notes : '-'), style: const pw.TextStyle(fontSize: 7.5)),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+            
+            // Observaciones Generales
+            if (credit.generalNotes.isNotEmpty) ...[
+              pw.SizedBox(height: 15),
+              pw.Text(
+                'OBSERVACIONES GENERALES',
+                style: pw.TextStyle(
+                  color: const PdfColor.fromInt(0x0D1A33),
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 4),
+              pw.Text(
+                credit.generalNotes,
+                style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+              ),
+            ],
+          ];
+        },
+        footer: (pw.Context context) {
+          return pw.Container(
+            alignment: pw.Alignment.centerRight,
+            margin: const pw.EdgeInsets.only(top: 10),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                  '"Tu estilo, nuestra pasión"',
+                  style: pw.TextStyle(fontSize: 8, fontStyle: pw.FontStyle.italic, color: PdfColors.grey400),
+                ),
+                pw.Text(
+                  'Página ${context.pageNumber} de ${context.pagesCount}',
+                  style: pw.TextStyle(fontSize: 8, color: PdfColors.grey400),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+
+    final pdfBytes = await pdf.save();
+    final filename = 'Extracto_Credito_${credit.clientName.replaceAll(RegExp(r'\s+'), '_')}.pdf';
+    await Printing.sharePdf(
+      bytes: pdfBytes,
+      filename: filename,
     );
   }
 
@@ -334,8 +713,17 @@ class CreditDetailScreen extends ConsumerWidget {
                     icon: Icons.check_circle_outline,
                     onPressed: () => _openPaymentSheet(context, ref, credit),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                 ],
+
+                // Botón Compartir Extracto PDF
+                CustomButton(
+                  text: 'Compartir Extracto (PDF)',
+                  icon: Icons.share_outlined,
+                  isSecondary: true,
+                  onPressed: () => _shareCreditPDF(context, credit),
+                ),
+                const SizedBox(height: 16),
 
                 // Tabla de Plan de Pagos
                 InstallmentTable(
