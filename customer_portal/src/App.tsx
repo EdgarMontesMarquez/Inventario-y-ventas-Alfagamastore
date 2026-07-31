@@ -422,7 +422,7 @@ export function App() {
               payment_method: inst.payment_method,
               notes: inst.notes,
               receipt_image_url: inst.receipt_image_url
-            }))
+            })).sort((a, b) => a.number - b.number)
           };
         })
       );

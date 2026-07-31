@@ -39,6 +39,8 @@ class SupabaseCreditRepository implements CreditRepository {
         );
       }).toList();
 
+      installmentsList.sort((a, b) => a.quotaNumber.compareTo(b.quotaNumber));
+
       return Credit(
         id: map['id'].toString(),
         clientName: map['customer_name'] ?? '',
@@ -88,6 +90,8 @@ class SupabaseCreditRepository implements CreditRepository {
         receiptImageUrl: instMap['receipt_image_url'],
       );
     }).toList();
+
+    installmentsList.sort((a, b) => a.quotaNumber.compareTo(b.quotaNumber));
 
     return Credit(
       id: response['id'].toString(),
