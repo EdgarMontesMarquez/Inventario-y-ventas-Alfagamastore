@@ -74,6 +74,13 @@ class _CreditsScreenState extends ConsumerState<CreditsScreen> {
         title: const Text('Créditos & Cobranza'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.notifications_active_outlined, size: 22, color: ColorTokens.lightBrandPrimary),
+            onPressed: () {
+              context.push('/collection-center');
+            },
+            tooltip: 'Centro de Cobranza (Hoy & Mora)',
+          ),
+          IconButton(
             icon: const Icon(Icons.history, size: 22, color: ColorTokens.lightBrandPrimary),
             onPressed: () {
               Navigator.push(
@@ -391,7 +398,7 @@ class _NewCreditSheetState extends ConsumerState<_NewCreditSheet> {
         totalQuotas: totalQuotas,
         quotaValue: _quotaValue,
         installments: installments,
-        generalNotes: 'Documento: $_docType ${_docIdCtrl.text.trim()} | Interés: ${_interestRate.toStringAsFixed(1)}%',
+        generalNotes: 'Documento: ${_docIdCtrl.text.trim().isNotEmpty ? "$_docType ${_docIdCtrl.text.trim()}" : ""} | Interés: ${_interestRate.toStringAsFixed(1)}%',
       );
 
       // Descontar 1 unidad de stock en Supabase si el producto está en el inventario
@@ -431,7 +438,7 @@ class _NewCreditSheetState extends ConsumerState<_NewCreditSheet> {
         ? <Customer>[]
         : registeredCustomers.where((c) =>
             c.name.toLowerCase().contains(_customerQuery.toLowerCase()) ||
-            c.documentId.contains(_customerQuery)).toList();
+            (c.documentId.isNotEmpty && c.documentId.contains(_customerQuery))).toList();
 
     final matchingProducts = _productQuery.trim().isEmpty
         ? <Product>[]
@@ -474,10 +481,12 @@ class _NewCreditSheetState extends ConsumerState<_NewCreditSheet> {
                   separatorBuilder: (ctx, index) => const Divider(height: 1),
                   itemBuilder: (ctx, idx) {
                     final c = matchingCustomers[idx];
+                    final docInfo = c.documentId.isNotEmpty ? '${c.documentType}: ${c.documentId}' : 'Sin doc';
+                    final phoneInfo = c.phone.isNotEmpty ? 'Tel: ${c.phone}' : 'Sin tel';
                     return ListTile(
                       dense: true,
                       title: Text(c.name, style: FontTokens.bodyMedium.copyWith(fontWeight: FontWeight.bold)),
-                      subtitle: Text('${c.documentType}: ${c.documentId} · Tel: ${c.phone}', style: FontTokens.bodySmall),
+                      subtitle: Text('$docInfo · $phoneInfo', style: FontTokens.bodySmall),
                       trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: ColorTokens.primary),
                       onTap: () {
                         setState(() {
@@ -485,7 +494,7 @@ class _NewCreditSheetState extends ConsumerState<_NewCreditSheet> {
                           _phoneCtrl.text = c.phone;
                           _addressCtrl.text = c.address;
                           _docIdCtrl.text = c.documentId;
-                          _docType = c.documentType;
+                          _docType = c.documentType.isNotEmpty ? c.documentType : 'CC';
                           _customerQuery = '';
                           _showCustomerResults = false;
                         });
@@ -506,7 +515,7 @@ class _NewCreditSheetState extends ConsumerState<_NewCreditSheet> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'TIPO',
+                        'TIPO (OPCIONAL)',
                         style: FontTokens.bodySmall.copyWith(
                           color: ColorTokens.lightTextSecondary,
                           fontWeight: FontWeight.bold,
@@ -535,7 +544,7 @@ class _NewCreditSheetState extends ConsumerState<_NewCreditSheet> {
                 Expanded(
                   flex: 3,
                   child: CustomTextField(
-                    label: 'N° Documento (Único)',
+                    label: 'N° Documento (opcional)',
                     hint: '1098765432',
                     controller: _docIdCtrl,
                     keyboardType: TextInputType.number,
@@ -549,7 +558,7 @@ class _NewCreditSheetState extends ConsumerState<_NewCreditSheet> {
               children: [
                 Expanded(
                   child: CustomPhoneInput(
-                    label: 'Teléfono',
+                    label: 'Teléfono (opcional)',
                     hint: '300 123 4567',
                     controller: _phoneCtrl,
                   ),
@@ -557,7 +566,7 @@ class _NewCreditSheetState extends ConsumerState<_NewCreditSheet> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: CustomTextField(
-                    label: 'Dirección',
+                    label: 'Dirección (opcional)',
                     hint: 'Cra 5 #12-34',
                     controller: _addressCtrl,
                   ),

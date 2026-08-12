@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "561011242909",
+    "project_id": "alfa-gama-store",
+    "storage_bucket": "alfa-gama-store.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:561011242909:android:81a74db02a78947a7ca174",
+        "android_client_info": {
+          "package_name": "com.alfagamastore.alfa_gama_store_erp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCCi3Q_i41htNFd5vU3MD6T_X3T1P4LW3k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

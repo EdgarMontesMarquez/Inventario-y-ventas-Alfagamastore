@@ -5,6 +5,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/config/supabase_config.dart';
 import 'core/navigation/app_router.dart';
+import 'core/services/push_notification_service.dart';
 import 'core/theme/app_theme.dart';
 
 void main() async {
@@ -17,6 +18,9 @@ void main() async {
     // ignore: deprecated_member_use
     anonKey: SupabaseConfig.anonKey,
   );
+
+  // Inicializar Firebase Push Notifications
+  await PushNotificationService().initialize();
 
   // Modo inmersivo para ocultar la barra de navegación del SO (aparece solo al hacer gesto swipe)
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);

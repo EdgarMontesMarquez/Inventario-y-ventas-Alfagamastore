@@ -27,16 +27,23 @@ class SupabaseCustomerRepository implements CustomerRepository {
 
   @override
   Future<void> addCustomer(Customer customer) async {
-    final String docId = customer.documentId.trim().isNotEmpty
-        ? customer.documentId.trim()
-        : 'CLI-${DateTime.now().millisecondsSinceEpoch}';
+    final String cleanDocId = customer.documentId.trim();
 
     // Verificar si el cliente ya existe por Documento de Identificación o por Nombre
-    final existing = await client
-        .from('customers')
-        .select('id')
-        .or('document_id.eq.$docId,name.ilike.${customer.name}')
-        .maybeSingle();
+    Map<String, dynamic>? existing;
+    if (cleanDocId.isNotEmpty) {
+      existing = await client
+          .from('customers')
+          .select('id')
+          .or('document_id.eq.$cleanDocId,name.ilike.${customer.name}')
+          .maybeSingle();
+    } else {
+      existing = await client
+          .from('customers')
+          .select('id')
+          .ilike('name', customer.name)
+          .maybeSingle();
+    }
 
     if (existing != null) {
       await client.from('customers').update({
@@ -44,7 +51,7 @@ class SupabaseCustomerRepository implements CustomerRepository {
         'phone': customer.phone,
         'address': customer.address,
         'document_type': customer.documentType.isEmpty ? 'CC' : customer.documentType,
-        'document_id': docId,
+        'document_id': cleanDocId,
       }).eq('id', existing['id']);
     } else {
       await client.from('customers').insert({
@@ -52,7 +59,7 @@ class SupabaseCustomerRepository implements CustomerRepository {
         'phone': customer.phone,
         'address': customer.address,
         'document_type': customer.documentType.isEmpty ? 'CC' : customer.documentType,
-        'document_id': docId,
+        'document_id': cleanDocId,
         'credit_limit': customer.totalPurchases,
         'current_balance': customer.activeCreditBalance,
       });

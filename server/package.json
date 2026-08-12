@@ -1,0 +1,27 @@
+{
+  "name": "alfa-gama-notifications-server",
+  "version": "1.0.0",
+  "description": "Servidor backend en Node.js para notificaciones push de créditos y cobranza diaria en Alfa Gama Store",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js"
+  },
+  "keywords": [
+    "push-notifications",
+    "firebase",
+    "supabase",
+    "render",
+    "credit-collection"
+  ],
+  "author": "Alfa Gama Store",
+  "license": "ISC",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "firebase-admin": "^13.1.0",
+    "node-cron": "^3.0.3"
+  }
+}

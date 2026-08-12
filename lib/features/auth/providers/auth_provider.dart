@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../core/services/push_notification_service.dart';
 import '../../../shared/providers/settings_provider.dart';
 
 class AuthStateData {
@@ -94,6 +95,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
       fullName: fetchedName,
       userRole: fetchedRole,
     );
+    PushNotificationService().syncDeviceToken(userId);
     ref.read(settingsProvider.notifier).loadSettings();
   }
 

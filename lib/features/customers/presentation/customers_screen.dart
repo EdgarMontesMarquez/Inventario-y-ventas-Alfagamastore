@@ -278,9 +278,7 @@ class _NewCustomerSheetState extends State<_NewCustomerSheet> {
         phone: _phoneCtrl.text.trim(),
         address: _addressCtrl.text.trim(),
         documentType: _docType,
-        documentId: _docIdCtrl.text.trim().isNotEmpty
-            ? _docIdCtrl.text.trim()
-            : DateTime.now().millisecondsSinceEpoch.toString(),
+        documentId: _docIdCtrl.text.trim(),
         totalPurchases: widget.initialCustomer?.totalPurchases ?? 0,
         activeCreditBalance: widget.initialCustomer?.activeCreditBalance ?? 0,
         createdAt: widget.initialCustomer?.createdAt ?? DateTime.now(),
@@ -318,7 +316,7 @@ class _NewCustomerSheetState extends State<_NewCustomerSheet> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'TIPO DOC',
+                      'TIPO DOC (OPCIONAL)',
                       style: FontTokens.bodySmall.copyWith(
                         color: ColorTokens.lightTextSecondary,
                         fontWeight: FontWeight.bold,
@@ -347,10 +345,9 @@ class _NewCustomerSheetState extends State<_NewCustomerSheet> {
               Expanded(
                 flex: 3,
                 child: CustomTextField(
-                  label: 'N° Documento Identificación',
+                  label: 'N° Documento (opcional)',
                   hint: '1108758381',
                   controller: _docIdCtrl,
-                  validator: (v) => v == null || v.trim().isEmpty ? 'Requerido' : null,
                 ),
               ),
             ],
@@ -358,10 +355,9 @@ class _NewCustomerSheetState extends State<_NewCustomerSheet> {
           const SizedBox(height: 12),
 
           CustomPhoneInput(
-            label: 'Teléfono',
+            label: 'Teléfono (opcional)',
             hint: '3004375191',
             controller: _phoneCtrl,
-            validator: (v) => v == null || v.trim().isEmpty ? 'Requerido' : null,
           ),
           const SizedBox(height: 12),
           CustomTextField(

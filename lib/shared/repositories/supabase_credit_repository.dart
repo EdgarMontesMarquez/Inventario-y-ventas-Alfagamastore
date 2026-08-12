@@ -113,13 +113,16 @@ class SupabaseCreditRepository implements CreditRepository {
   Future<void> addCredit(Credit credit) async {
     // Extraer tipo y número de documento del campo de notas si existen
     String docType = 'CC';
-    String docId = DateTime.now().millisecondsSinceEpoch.toString();
+    String docId = '';
     if (credit.generalNotes.contains('Documento:')) {
       try {
-        final docParts = credit.generalNotes.split('Documento:')[1].split('|')[0].trim().split(' ');
+        final docText = credit.generalNotes.split('Documento:')[1].split('|')[0].trim();
+        final docParts = docText.split(' ');
         if (docParts.length >= 2) {
           docType = docParts[0].trim();
           docId = docParts[1].trim();
+        } else if (docParts.length == 1 && docParts[0].trim().isNotEmpty) {
+          docType = docParts[0].trim();
         }
       } catch (_) {}
     }
@@ -139,10 +142,18 @@ class SupabaseCreditRepository implements CreditRepository {
     // 1. Auto-registrar o vincular cliente en la tabla public.customers sin duplicar
     String? customerId;
     try {
-      final existingCusts = await client
-          .from('customers')
-          .select('id')
-          .or('document_id.eq.$docId,name.ilike.${credit.clientName}');
+      final List existingCusts;
+      if (docId.isNotEmpty) {
+        existingCusts = await client
+            .from('customers')
+            .select('id')
+            .or('document_id.eq.$docId,name.ilike.${credit.clientName}');
+      } else {
+        existingCusts = await client
+            .from('customers')
+            .select('id')
+            .ilike('name', credit.clientName);
+      }
 
       if (existingCusts.isNotEmpty) {
         customerId = existingCusts.first['id'].toString();

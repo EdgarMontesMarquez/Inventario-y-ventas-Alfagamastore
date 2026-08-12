@@ -165,9 +165,14 @@ class CreditDetailScreen extends ConsumerWidget {
                           text: pw.TextSpan(
                             children: [
                               pw.TextSpan(text: 'CC/NIT: ', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColors.black)),
-                              pw.TextSpan(text: credit.generalNotes.contains('Documento:') 
-                                ? credit.generalNotes.split('|')[0].replaceAll('Documento:', '').trim()
-                                : '-', style: pw.TextStyle(fontSize: 9, color: PdfColors.black)),
+                              pw.TextSpan(
+                                text: credit.generalNotes.contains('Documento:') 
+                                  ? (credit.generalNotes.split('|')[0].replaceAll('Documento:', '').trim().isNotEmpty 
+                                      ? credit.generalNotes.split('|')[0].replaceAll('Documento:', '').trim() 
+                                      : '-')
+                                  : '-', 
+                                style: pw.TextStyle(fontSize: 9, color: PdfColors.black),
+                              ),
                             ],
                           ),
                         ),
@@ -182,7 +187,7 @@ class CreditDetailScreen extends ConsumerWidget {
                           text: pw.TextSpan(
                             children: [
                               pw.TextSpan(text: 'TELÉFONO: ', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColors.black)),
-                              pw.TextSpan(text: credit.clientPhone, style: pw.TextStyle(fontSize: 9, color: PdfColors.black)),
+                              pw.TextSpan(text: credit.clientPhone.isNotEmpty ? credit.clientPhone : '-', style: pw.TextStyle(fontSize: 9, color: PdfColors.black)),
                             ],
                           ),
                         ),
@@ -299,7 +304,7 @@ class CreditDetailScreen extends ConsumerWidget {
 
             // Título Plan de Pagos
             pw.Text(
-              'PLAN DE PAGOS (DETALLE DE CUOTAS)',
+              'PLAN DE AMORTIZACIÓN Y CUOTAS',
               style: pw.TextStyle(
                 color: const PdfColor.fromInt(0x0D1A33),
                 fontSize: 11,
@@ -317,7 +322,7 @@ class CreditDetailScreen extends ConsumerWidget {
                     color: PdfColor.fromInt(0x0D1A33),
                   ),
                   children: [
-                    for (var header in ['N°', 'Vencimiento', 'Cuota', 'Abono', 'Saldo', 'Estado', 'Obs.'])
+                    for (var header in ['N°', 'Fecha', 'Cuota', 'Abono', 'Saldo', 'Estado', 'Obs.'])
                       pw.Container(
                         padding: const pw.EdgeInsets.all(4),
                         alignment: pw.Alignment.centerLeft,
@@ -333,48 +338,64 @@ class CreditDetailScreen extends ConsumerWidget {
                   ],
                 ),
                 for (var r in rows)
-                  pw.TableRow(
-                    decoration: pw.BoxDecoration(
-                      color: r['inst'].quotaNumber % 2 == 0 ? PdfColors.grey50 : PdfColors.white,
-                    ),
-                    children: [
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.all(4),
-                        child: pw.Text(r['inst'].quotaNumber.toString(), style: const pw.TextStyle(fontSize: 7.5)),
+                  () {
+                    final inst = r['inst'] as CreditInstallment;
+                    final isFullyPaid = credit.pendingBalance <= 0;
+                    final statusKey = isFullyPaid ? 'pagado' : inst.status;
+                    final statusLabel = statusKey.toUpperCase();
+                    final statusColor = statusKey == 'pagado' 
+                        ? PdfColors.green700 
+                        : (statusKey == 'parcial' 
+                            ? PdfColors.orange700 
+                            : (statusKey == 'vencido' ? PdfColors.red700 : PdfColors.grey700));
+
+                    final obsText = inst.paymentMethod.isNotEmpty 
+                        ? inst.paymentMethod 
+                        : (inst.notes.isNotEmpty ? inst.notes : '-');
+
+                    return pw.TableRow(
+                      decoration: pw.BoxDecoration(
+                        color: inst.quotaNumber % 2 == 0 ? PdfColors.grey50 : PdfColors.white,
                       ),
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.all(4),
-                        child: pw.Text(df.format(r['inst'].dueDate), style: const pw.TextStyle(fontSize: 7.5)),
-                      ),
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.all(4),
-                        child: pw.Text(cf.format(r['inst'].quotaValue), style: const pw.TextStyle(fontSize: 7.5)),
-                      ),
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.all(4),
-                        child: pw.Text(r['inst'].paidAmount > 0 ? cf.format(r['inst'].paidAmount) : '-', style: const pw.TextStyle(fontSize: 7.5)),
-                      ),
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.all(4),
-                        child: pw.Text(cf.format(r['balance']), style: const pw.TextStyle(fontSize: 7.5)),
-                      ),
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.all(4),
-                        child: pw.Text(
-                          r['inst'].paidAmount >= r['inst'].quotaValue ? 'PAGADO' : (r['inst'].paidAmount > 0 ? 'PARCIAL' : (r['inst'].dueDate.isBefore(DateTime.now()) ? 'VENCIDO' : 'PENDIENTE')), 
-                          style: pw.TextStyle(
-                            fontSize: 7, 
-                            fontWeight: pw.FontWeight.bold,
-                            color: r['inst'].paidAmount >= r['inst'].quotaValue ? PdfColors.green : (r['inst'].paidAmount > 0 ? PdfColors.orange : (r['inst'].dueDate.isBefore(DateTime.now()) ? PdfColors.red : PdfColors.grey700))
-                          )
+                      children: [
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(4),
+                          child: pw.Text(inst.quotaNumber.toString(), style: const pw.TextStyle(fontSize: 7.5)),
                         ),
-                      ),
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.all(4),
-                        child: pw.Text(r['inst'].paymentMethod.isNotEmpty ? r['inst'].paymentMethod : (r['inst'].notes.isNotEmpty ? r['inst'].notes : '-'), style: const pw.TextStyle(fontSize: 7.5)),
-                      ),
-                    ],
-                  ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(4),
+                          child: pw.Text(df.format(inst.dueDate), style: const pw.TextStyle(fontSize: 7.5)),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(4),
+                          child: pw.Text(cf.format(inst.quotaValue), style: const pw.TextStyle(fontSize: 7.5)),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(4),
+                          child: pw.Text(inst.paidAmount > 0 ? cf.format(inst.paidAmount) : '-', style: const pw.TextStyle(fontSize: 7.5)),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(4),
+                          child: pw.Text(cf.format(r['balance']), style: const pw.TextStyle(fontSize: 7.5)),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(4),
+                          child: pw.Text(
+                            statusLabel, 
+                            style: pw.TextStyle(
+                              fontSize: 7, 
+                              fontWeight: pw.FontWeight.bold,
+                              color: statusColor,
+                            ),
+                          ),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(4),
+                          child: pw.Text(obsText, style: const pw.TextStyle(fontSize: 7.5)),
+                        ),
+                      ],
+                    );
+                  }(),
               ],
             ),
             

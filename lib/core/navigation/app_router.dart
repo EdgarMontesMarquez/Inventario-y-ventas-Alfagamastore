@@ -7,6 +7,7 @@ import '../../features/dashboard/presentation/dashboard_screen.dart';
 import '../../features/inventory/presentation/inventory_screen.dart';
 import '../../features/credits/presentation/credits_screen.dart';
 import '../../features/credits/presentation/credit_detail_screen.dart';
+import '../../features/credits/presentation/collection_center_screen.dart';
 import '../../features/sales/presentation/sales_screen.dart';
 import '../../features/customers/presentation/customers_screen.dart';
 import '../../features/reports/presentation/reports_screen.dart';
@@ -164,6 +165,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: rootNavigatorKey,
         path: '/user-management',
         builder: (context, state) => const UserManagementScreen(),
+      ),
+      GoRoute(
+        parentNavigatorKey: rootNavigatorKey,
+        path: '/collection-center',
+        builder: (context, state) => const CollectionCenterScreen(),
       ),
       // La ruta de detalle de crédito está por fuera del Bottom Nav Shell para ocultar la barra
       GoRoute(
