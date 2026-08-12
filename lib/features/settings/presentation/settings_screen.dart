@@ -315,7 +315,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               Center(
                 child: Column(
                   children: [
-                    Text('AlfaGamaStore v1.0.0', style: FontTokens.label.copyWith(color: ColorTokens.textDim)),
+                    Text('AlfaGamaStore v1.0.5', style: FontTokens.label.copyWith(color: ColorTokens.textDim)),
                   ],
                 ),
               ),

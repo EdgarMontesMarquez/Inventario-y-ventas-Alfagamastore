@@ -224,6 +224,40 @@ function exportCustomerCreditToPDF(credit: Credit) {
   });
 
   let finalY = (doc as any).lastAutoTable.finalY || 140;
+
+  if (credit.charges && credit.charges.length > 0) {
+    let chargesStartY = finalY + 8;
+    if (chargesStartY + 30 > 280) {
+      doc.addPage();
+      chargesStartY = 15;
+    }
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(13, 26, 51);
+    doc.text('HISTORIAL DE CARGOS Y RECARGOS ADICIONALES', 15, chargesStartY);
+
+    autoTable(doc, {
+      startY: chargesStartY + 3,
+      margin: { left: 15, right: 15 },
+      head: [['Fecha', 'Concepto / Motivo', 'Método de Aplicación', 'Valor']],
+      body: credit.charges.map(ch => [
+        fmtD(ch.created_at),
+        ch.concept,
+        ch.distribution_method === 'add_installment'
+          ? 'Nueva cuota al final'
+          : ch.distribution_method === 'next_installment'
+            ? 'Cargado a próxima cuota'
+            : 'Repartido en cuotas',
+        fmtC(ch.amount)
+      ]),
+      styles: { font: 'helvetica', fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [13, 26, 51], textColor: [255, 255, 255], fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [248, 249, 250] }
+    });
+
+    finalY = (doc as any).lastAutoTable.finalY || finalY;
+  }
+
   let notesToPrint = credit.notes || '';
   if (notesToPrint.includes('|')) {
     const parts = notesToPrint.split('|');
@@ -377,7 +411,7 @@ export function App() {
         return;
       }
 
-      // 3. Cargar Cuotas (Installments) de forma segura para cada crédito
+      // 3. Cargar Cuotas (Installments) y Cargos Extras para cada crédito
       const fullCredits: Credit[] = await Promise.all(
         rawCredits.map(async (c: any) => {
           let instList: any[] = [];
@@ -388,6 +422,16 @@ export function App() {
               .eq('credit_id', c.id)
               .order('number', { ascending: true });
             if (instData) instList = instData;
+          } catch (_) {}
+
+          let chargeList: any[] = [];
+          try {
+            const { data: chargeData } = await supabase
+              .from('credit_charges')
+              .select('*')
+              .eq('credit_id', c.id)
+              .order('created_at', { ascending: true });
+            if (chargeData) chargeList = chargeData;
           } catch (_) {}
 
           const totalAmt = Number(c.total_amount || 0);
@@ -422,7 +466,17 @@ export function App() {
               payment_method: inst.payment_method,
               notes: inst.notes,
               receipt_image_url: inst.receipt_image_url
-            })).sort((a, b) => a.number - b.number)
+            })).sort((a, b) => a.number - b.number),
+            charges: chargeList.map((ch: any) => ({
+              id: String(ch.id),
+              credit_id: String(ch.credit_id),
+              concept: ch.concept || 'Cargo Extra',
+              amount: Number(ch.amount || 0),
+              distribution_method: ch.distribution_method || 'distribute_remaining',
+              created_at: ch.created_at || new Date().toISOString(),
+              created_by: ch.created_by || 'Administrador',
+              notes: ch.notes
+            }))
           };
         })
       );
@@ -797,6 +851,43 @@ export function App() {
                           </table>
                         </div>
                       )}
+
+                      {/* Cargos y Recargos Adicionales si existen */}
+                      {credit.charges && credit.charges.length > 0 && (
+                        <div className="mt-5 pt-4 border-t border-slate-100">
+                          <h4 className="font-heading font-bold text-xs text-[#0A192F] uppercase tracking-wider mb-2.5 flex items-center justify-between">
+                            <span className="flex items-center gap-1.5 text-[#0066FF]">
+                              <Sparkles className="w-3.5 h-3.5" />
+                              Cargos y Recargos Aplicados
+                            </span>
+                            <span className="text-[10px] bg-[#E6F0FF] text-[#0066FF] px-2 py-0.5 rounded-full font-extrabold">
+                              {credit.charges.length} cargo{credit.charges.length > 1 ? 's' : ''}
+                            </span>
+                          </h4>
+                          <div className="space-y-2">
+                            {credit.charges.map((ch) => (
+                              <div key={ch.id} className="p-3 bg-[#F4F7FF] rounded-xl border border-[#BFDBFE] flex items-center justify-between text-xs">
+                                <div>
+                                  <span className="font-bold text-[#0A192F] block">{ch.concept}</span>
+                                  <span className="text-[10px] text-[#475569]">
+                                    {formatDate(ch.created_at)} · {
+                                      ch.distribution_method === 'add_installment'
+                                        ? 'Nueva cuota al final'
+                                        : ch.distribution_method === 'next_installment'
+                                          ? 'Carga en próxima cuota'
+                                          : 'Repartido en cuotas'
+                                    }
+                                  </span>
+                                  {ch.notes && <p className="text-[10px] text-slate-500 italic mt-0.5">{ch.notes}</p>}
+                                </div>
+                                <span className="font-bold text-[#0066FF] font-mono-finance text-sm">
+                                  +{formatCurrency(ch.amount)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -855,8 +946,13 @@ export function App() {
         <div className="max-w-4xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2.5">
             <img src="/logo_compact.png" alt="Logo AlfaGama" className="w-12 h-12 object-contain" />
-            <span className="font-bold text-white">ALFA GAMA STORE</span>
-            <span className="text-slate-500">· Moda, Calidad y Estilo</span>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-white">ALFA GAMA STORE</span>
+                <span className="text-[10px] bg-slate-800 text-slate-300 font-mono px-2 py-0.5 rounded-md border border-slate-700">v1.0.5</span>
+              </div>
+              <p className="text-slate-500 text-[11px]">Moda, Calidad y Estilo</p>
+            </div>
           </div>
           <div className="flex items-center gap-4 text-slate-300">
             <a

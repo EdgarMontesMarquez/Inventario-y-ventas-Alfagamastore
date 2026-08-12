@@ -9,7 +9,14 @@ class SupabaseCreditRepository implements CreditRepository {
 
   @override
   Future<List<Credit>> getCredits() async {
-    final response = await client.from('credits').select('*, credit_installments(*)').order('created_at', ascending: false);
+    dynamic response;
+    try {
+      response = await client.from('credits').select('*, credit_installments(*), credit_charges(*)').order('created_at', ascending: false);
+    } catch (_) {
+      // Fallback si la tabla credit_charges aún no ha sido migrada
+      response = await client.from('credits').select('*, credit_installments(*)').order('created_at', ascending: false);
+    }
+
     return (response as List).map((map) {
       final installmentsList = (map['credit_installments'] as List? ?? []).map((instMap) {
         final double quotaVal = (instMap['amount'] as num).toDouble();
@@ -41,6 +48,21 @@ class SupabaseCreditRepository implements CreditRepository {
 
       installmentsList.sort((a, b) => a.quotaNumber.compareTo(b.quotaNumber));
 
+      final chargesList = (map['credit_charges'] as List? ?? []).map((chMap) {
+        return CreditCharge(
+          id: chMap['id']?.toString() ?? '',
+          creditId: chMap['credit_id']?.toString() ?? map['id'].toString(),
+          concept: chMap['concept'] ?? 'Cargo Extra',
+          amount: (chMap['amount'] as num? ?? 0).toDouble(),
+          distributionMethod: chMap['distribution_method'] ?? 'distribute_remaining',
+          createdAt: chMap['created_at'] != null ? DateTime.parse(chMap['created_at']) : DateTime.now(),
+          createdBy: chMap['created_by'] ?? 'Administrador',
+          notes: chMap['notes'] ?? '',
+        );
+      }).toList();
+
+      chargesList.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+
       return Credit(
         id: map['id'].toString(),
         clientName: map['customer_name'] ?? '',
@@ -53,6 +75,7 @@ class SupabaseCreditRepository implements CreditRepository {
         totalQuotas: (map['installments_count'] as num).toInt(),
         quotaValue: installmentsList.isNotEmpty ? installmentsList.first.quotaValue : 0.0,
         installments: installmentsList,
+        charges: chargesList,
         generalNotes: map['notes'] ?? '',
       );
     }).toList();
@@ -60,7 +83,12 @@ class SupabaseCreditRepository implements CreditRepository {
 
   @override
   Future<Credit?> getCreditById(String id) async {
-    final response = await client.from('credits').select('*, credit_installments(*)').eq('id', id).maybeSingle();
+    dynamic response;
+    try {
+      response = await client.from('credits').select('*, credit_installments(*), credit_charges(*)').eq('id', id).maybeSingle();
+    } catch (_) {
+      response = await client.from('credits').select('*, credit_installments(*)').eq('id', id).maybeSingle();
+    }
     if (response == null) return null;
 
     final installmentsList = (response['credit_installments'] as List? ?? []).map((instMap) {
@@ -93,6 +121,21 @@ class SupabaseCreditRepository implements CreditRepository {
 
     installmentsList.sort((a, b) => a.quotaNumber.compareTo(b.quotaNumber));
 
+    final chargesList = (response['credit_charges'] as List? ?? []).map((chMap) {
+      return CreditCharge(
+        id: chMap['id']?.toString() ?? '',
+        creditId: chMap['credit_id']?.toString() ?? response['id'].toString(),
+        concept: chMap['concept'] ?? 'Cargo Extra',
+        amount: (chMap['amount'] as num? ?? 0).toDouble(),
+        distributionMethod: chMap['distribution_method'] ?? 'distribute_remaining',
+        createdAt: chMap['created_at'] != null ? DateTime.parse(chMap['created_at']) : DateTime.now(),
+        createdBy: chMap['created_by'] ?? 'Administrador',
+        notes: chMap['notes'] ?? '',
+      );
+    }).toList();
+
+    chargesList.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+
     return Credit(
       id: response['id'].toString(),
       clientName: response['customer_name'] ?? '',
@@ -105,6 +148,7 @@ class SupabaseCreditRepository implements CreditRepository {
       totalQuotas: (response['installments_count'] as num).toInt(),
       quotaValue: installmentsList.isNotEmpty ? installmentsList.first.quotaValue : 0.0,
       installments: installmentsList,
+      charges: chargesList,
       generalNotes: response['notes'] ?? '',
     );
   }
@@ -255,4 +299,82 @@ class SupabaseCreditRepository implements CreditRepository {
       }).eq('credit_id', credit.id).eq('number', inst.quotaNumber);
     }
   }
+
+  @override
+  Future<void> addExtraCharge(String creditId, CreditCharge charge, Credit updatedCredit) async {
+    // 1. Guardar registro en la tabla credit_charges (si la tabla existe)
+    try {
+      await client.from('credit_charges').insert({
+        'credit_id': creditId,
+        'concept': charge.concept,
+        'amount': charge.amount,
+        'distribution_method': charge.distributionMethod,
+        'created_by': charge.createdBy,
+        'notes': charge.notes,
+      });
+    } catch (e) {
+      // Ignorar si aún no se ha ejecutado la migración de la tabla en Supabase
+    }
+
+    // 2. Actualizar el monto total del crédito y la cantidad de cuotas en public.credits
+    await client.from('credits').update({
+      'total_amount': updatedCredit.totalSale,
+      'installments_count': updatedCredit.totalQuotas,
+      'status': updatedCredit.status,
+    }).eq('id', creditId);
+
+    // 3. Actualizar o insertar cuotas modificadas en public.credit_installments
+    try {
+      final existingInsts = await client.from('credit_installments').select('number').eq('credit_id', creditId);
+      final existingNumbers = (existingInsts as List).map((i) => (i['number'] as num).toInt()).toSet();
+
+      for (var inst in updatedCredit.installments) {
+        final String formattedNotes = inst.paidAmount > 0
+            ? 'Abono: \$${inst.paidAmount.toInt()} ${inst.notes}'.trim()
+            : inst.notes;
+
+        if (existingNumbers.contains(inst.quotaNumber)) {
+          await client.from('credit_installments').update({
+            'amount': inst.quotaValue,
+            'paid_amount': inst.paidAmount,
+            'due_date': inst.dueDate.toIso8601String(),
+            'is_paid': inst.paidAmount >= inst.quotaValue,
+            'paid_at': inst.paidDate?.toIso8601String(),
+            'payment_method': inst.paymentMethod,
+            'notes': formattedNotes,
+            'receipt_image_url': inst.receiptImageUrl,
+          }).eq('credit_id', creditId).eq('number', inst.quotaNumber);
+        } else {
+          await client.from('credit_installments').insert({
+            'credit_id': creditId,
+            'number': inst.quotaNumber,
+            'amount': inst.quotaValue,
+            'paid_amount': inst.paidAmount,
+            'due_date': inst.dueDate.toIso8601String(),
+            'is_paid': inst.paidAmount >= inst.quotaValue,
+            'paid_at': inst.paidDate?.toIso8601String(),
+            'payment_method': inst.paymentMethod,
+            'notes': formattedNotes,
+            'receipt_image_url': inst.receiptImageUrl,
+          });
+        }
+      }
+    } catch (_) {}
+
+    // 4. Actualizar el saldo actual del cliente en public.customers
+    try {
+      final creditData = await client.from('credits').select('customer_id').eq('id', creditId).maybeSingle();
+      if (creditData != null && creditData['customer_id'] != null) {
+        final custId = creditData['customer_id'].toString();
+        final cust = await client.from('customers').select('current_balance').eq('id', custId).maybeSingle();
+        if (cust != null) {
+          final double curBal = (cust['current_balance'] as num? ?? 0).toDouble();
+          await client.from('customers').update({
+            'current_balance': curBal + charge.amount,
+          }).eq('id', custId);
+        }
+      }
+    } catch (_) {}
+  }
 }
+

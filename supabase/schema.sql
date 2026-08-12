@@ -196,12 +196,25 @@ CREATE TABLE IF NOT EXISTS public.cash_expenses (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- 14. TABLA DE CARGOS EXTRAS Y RECARGOS A CRÉDITOS (CREDIT_CHARGES)
+CREATE TABLE IF NOT EXISTS public.credit_charges (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    credit_id UUID NOT NULL REFERENCES public.credits(id) ON DELETE CASCADE,
+    concept VARCHAR(255) NOT NULL, -- Ej: 'Recargo por mora', 'Producto adicional', 'Flete', 'Ajuste administrativo'
+    amount NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
+    distribution_method VARCHAR(50) NOT NULL DEFAULT 'distribute_remaining', -- 'distribute_remaining' | 'add_installment' | 'next_installment'
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_by VARCHAR(200) DEFAULT 'Administrador',
+    notes TEXT
+);
+
 -- =======================================================
 -- ÍNDICES DE BÚSQUEDA RÁPIDA (PERFORMANCE & SEARCH)
 -- =======================================================
 CREATE INDEX IF NOT EXISTS idx_customers_doc_id ON public.customers(document_id);
 CREATE INDEX IF NOT EXISTS idx_credits_customer_id ON public.credits(customer_id);
 CREATE INDEX IF NOT EXISTS idx_credits_customer_phone ON public.credits(customer_phone);
+CREATE INDEX IF NOT EXISTS idx_credit_charges_credit_id ON public.credit_charges(credit_id);
 
 -- =======================================================
 -- TRIGGER AUTOMÁTICO: DESCONTAR INVENTARIO EN CADA VENTA
@@ -233,6 +246,7 @@ ALTER TABLE public.sales ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sale_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.credits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.credit_installments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.credit_charges ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.cash_shifts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.cash_expenses ENABLE ROW LEVEL SECURITY;
 
@@ -246,6 +260,7 @@ CREATE POLICY "Allow authenticated access to sales" ON public.sales FOR ALL USIN
 CREATE POLICY "Allow authenticated access to sale_items" ON public.sale_items FOR ALL USING (auth.role() = 'authenticated');
 CREATE POLICY "Allow authenticated access to credits" ON public.credits FOR ALL USING (auth.role() = 'authenticated');
 CREATE POLICY "Allow authenticated access to credit_installments" ON public.credit_installments FOR ALL USING (auth.role() = 'authenticated');
+CREATE POLICY "Allow authenticated access to credit_charges" ON public.credit_charges FOR ALL USING (auth.role() = 'authenticated');
 CREATE POLICY "Allow authenticated access to cash_shifts" ON public.cash_shifts FOR ALL USING (auth.role() = 'authenticated');
 CREATE POLICY "Allow authenticated access to cash_expenses" ON public.cash_expenses FOR ALL USING (auth.role() = 'authenticated');
 
@@ -253,3 +268,5 @@ CREATE POLICY "Allow authenticated access to cash_expenses" ON public.cash_expen
 CREATE POLICY "Allow public read access to customers" ON public.customers FOR SELECT USING (true);
 CREATE POLICY "Allow public read access to credits" ON public.credits FOR SELECT USING (true);
 CREATE POLICY "Allow public read access to credit_installments" ON public.credit_installments FOR SELECT USING (true);
+CREATE POLICY "Allow public read access to credit_charges" ON public.credit_charges FOR SELECT USING (true);
+

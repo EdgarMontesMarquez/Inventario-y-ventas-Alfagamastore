@@ -19,6 +19,7 @@ import '../../../shared/widgets/image_viewer_modal.dart';
 import '../../../shared/providers/repository_providers.dart';
 import '../../../shared/models/credit.dart';
 import '../../../core/utils/currency_formatter.dart';
+import '../../auth/providers/auth_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -42,6 +43,30 @@ class CreditDetailScreen extends ConsumerWidget {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
                 content: Text('Pago de cuota registrado exitosamente'),
+                backgroundColor: ColorTokens.lightBrandPrimary,
+              ),
+            );
+          }
+        },
+      ),
+    );
+  }
+
+  void _openExtraChargeSheet(BuildContext context, WidgetRef ref, Credit credit) {
+    CustomOverlays.showBottomSheet(
+      context: context,
+      title: 'Agregar cargo extra al crédito',
+      child: _AddExtraChargeSheet(
+        credit: credit,
+        onSave: (charge, updatedCredit) async {
+          final repo = ref.read(creditRepositoryProvider);
+          await repo.addExtraCharge(credit.id, charge, updatedCredit);
+          ref.invalidate(creditsFutureProvider);
+          if (context.mounted) {
+            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Cargo de ${CurrencyUtils.format(charge.amount)} aplicado exitosamente.'),
                 backgroundColor: ColorTokens.lightBrandPrimary,
               ),
             );
@@ -302,6 +327,67 @@ class CreditDetailScreen extends ConsumerWidget {
             ),
             pw.SizedBox(height: 15),
 
+            // Historial de Cargos Extras en el PDF si existen
+            if (credit.charges.isNotEmpty) ...[
+              pw.Text(
+                'HISTORIAL DE CARGOS Y RECARGOS ADICIONALES',
+                style: pw.TextStyle(
+                  color: const PdfColor.fromInt(0x0D1A33),
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 4),
+              pw.Table(
+                border: pw.TableBorder.all(color: PdfColors.grey200, width: 0.5),
+                children: [
+                  pw.TableRow(
+                    decoration: const pw.BoxDecoration(color: PdfColor.fromInt(0x0D1A33)),
+                    children: [
+                      for (var h in ['Fecha', 'Concepto / Motivo', 'Método de Aplicación', 'Valor'])
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(4),
+                          child: pw.Text(
+                            h,
+                            style: pw.TextStyle(color: PdfColors.white, fontSize: 7.5, fontWeight: pw.FontWeight.bold),
+                          ),
+                        ),
+                    ],
+                  ),
+                  for (var ch in credit.charges)
+                    pw.TableRow(
+                      decoration: const pw.BoxDecoration(color: PdfColors.white),
+                      children: [
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(4),
+                          child: pw.Text(df.format(ch.createdAt), style: const pw.TextStyle(fontSize: 7)),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(4),
+                          child: pw.Text(ch.concept, style: const pw.TextStyle(fontSize: 7)),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(4),
+                          child: pw.Text(
+                            ch.distributionMethod == 'add_installment'
+                                ? 'Nueva cuota al final'
+                                : ch.distributionMethod == 'next_installment'
+                                    ? 'Cargado a próxima cuota'
+                                    : 'Repartido en cuotas',
+                            style: const pw.TextStyle(fontSize: 7),
+                          ),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(4),
+                          child: pw.Text(cf.format(ch.amount), style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+              pw.SizedBox(height: 12),
+            ],
+
             // Título Plan de Pagos
             pw.Text(
               'PLAN DE AMORTIZACIÓN Y CUOTAS',
@@ -451,6 +537,7 @@ class CreditDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final creditsAsync = ref.watch(creditsFutureProvider);
+    final authState = ref.watch(authProvider);
     final dateFmt = DateFormat('dd/MM/yyyy');
 
     return Scaffold(
@@ -727,12 +814,31 @@ class CreditDetailScreen extends ConsumerWidget {
                   const SizedBox(height: 12),
                 ],
 
-                // Botón Registrar Pago
+                // Botones de Acción (Registrar Pago y Agregar Cargo Extra)
                 if (st != 'finalizado') ...[
-                  CustomButton(
-                    text: 'Registrar pago',
-                    icon: Icons.check_circle_outline,
-                    onPressed: () => _openPaymentSheet(context, ref, credit),
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: CustomButton(
+                          text: 'Registrar pago',
+                          icon: Icons.check_circle_outline,
+                          onPressed: () => _openPaymentSheet(context, ref, credit),
+                        ),
+                      ),
+                      if (authState.isAdmin) ...[
+                        const SizedBox(width: 8),
+                        Expanded(
+                          flex: 2,
+                          child: CustomButton(
+                            text: 'Cargo Extra',
+                            icon: Icons.add_card_outlined,
+                            isSecondary: true,
+                            onPressed: () => _openExtraChargeSheet(context, ref, credit),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                   const SizedBox(height: 12),
                 ],
@@ -745,6 +851,12 @@ class CreditDetailScreen extends ConsumerWidget {
                   onPressed: () => _shareCreditPDF(context, credit),
                 ),
                 const SizedBox(height: 16),
+
+                // Historial de Cargos Extras si existen
+                if (credit.charges.isNotEmpty) ...[
+                  _buildExtraChargesSection(context, credit),
+                  const SizedBox(height: 16),
+                ],
 
                 // Tabla de Plan de Pagos
                 InstallmentTable(
@@ -759,6 +871,139 @@ class CreditDetailScreen extends ConsumerWidget {
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildExtraChargesSection(BuildContext context, Credit credit) {
+    final df = DateFormat('dd/MM/yyyy hh:mm a');
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: ColorTokens.lightBorderSubtle),
+        boxShadow: BorderShadowTokens.shadowClayCard,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.receipt_long_outlined, color: ColorTokens.lightBrandPrimary, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'CARGOS Y RECARGOS APLICADOS',
+                    style: FontTokens.label.copyWith(
+                      color: ColorTokens.lightBrandPrimary,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: ColorTokens.lightBrandPrimary.withAlpha(20),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '${credit.charges.length} cargo${credit.charges.length > 1 ? 's' : ''}',
+                  style: FontTokens.label.copyWith(color: ColorTokens.lightBrandPrimary, fontWeight: FontWeight.bold, fontSize: 10),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: credit.charges.length,
+            separatorBuilder: (c, i) => const SizedBox(height: 8),
+            itemBuilder: (context, idx) {
+              final ch = credit.charges[idx];
+              final String methodLabel = ch.distributionMethod == 'add_installment'
+                  ? 'Nueva cuota al final'
+                  : ch.distributionMethod == 'next_installment'
+                      ? 'Carga en próxima cuota'
+                      : 'Repartido en cuotas';
+
+              return Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: ColorTokens.lightBgSecondary,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: ColorTokens.lightBorderSubtle),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: ColorTokens.lightBorderSubtle),
+                      ),
+                      child: const Icon(Icons.add_shopping_cart_rounded, color: ColorTokens.lightBrandPrimary, size: 18),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            ch.concept,
+                            style: FontTokens.bodyMedium.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: ColorTokens.lightTextPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${df.format(ch.createdAt)} · Por ${ch.createdBy}',
+                            style: FontTokens.bodySmall.copyWith(fontSize: 10, color: ColorTokens.lightTextSecondary),
+                          ),
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: ColorTokens.lightBrandSecondary.withAlpha(25),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              methodLabel,
+                              style: FontTokens.label.copyWith(fontSize: 9, color: ColorTokens.lightBrandSecondary, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          if (ch.notes.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              'Nota: ${ch.notes}',
+                              style: FontTokens.bodySmall.copyWith(fontSize: 11, fontStyle: FontStyle.italic, color: ColorTokens.lightTextSecondary),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    Text(
+                      '+${CurrencyUtils.format(ch.amount)}',
+                      style: FontTokens.moneyMedium.copyWith(
+                        color: ColorTokens.lightBrandPrimary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
       ),
     );
   }
@@ -1201,3 +1446,387 @@ class _RegisterPaymentSheetState extends State<_RegisterPaymentSheet> {
     );
   }
 }
+
+class _AddExtraChargeSheet extends StatefulWidget {
+  final Credit credit;
+  final Function(CreditCharge charge, Credit updatedCredit) onSave;
+
+  const _AddExtraChargeSheet({
+    required this.credit,
+    required this.onSave,
+  });
+
+  @override
+  State<_AddExtraChargeSheet> createState() => _AddExtraChargeSheetState();
+}
+
+class _AddExtraChargeSheetState extends State<_AddExtraChargeSheet> {
+  final TextEditingController _conceptCtrl = TextEditingController(text: 'Recargo por mora');
+  final TextEditingController _amountCtrl = TextEditingController();
+  final TextEditingController _notesCtrl = TextEditingController();
+
+  String _selectedMethod = 'distribute_remaining'; // 'distribute_remaining' | 'add_installment' | 'next_installment'
+  bool _isSubmitting = false;
+
+  final List<String> _quickConcepts = [
+    'Recargo por mora',
+    'Prenda / Producto extra',
+    'Flete / Envío',
+    'Ajuste administrativo',
+    'Otro motivo',
+  ];
+
+  @override
+  void dispose() {
+    _conceptCtrl.dispose();
+    _amountCtrl.dispose();
+    _notesCtrl.dispose();
+    super.dispose();
+  }
+
+  void _submitCharge() {
+    if (_isSubmitting) return;
+    final amount = double.tryParse(_amountCtrl.text) ?? 0.0;
+    final concept = _conceptCtrl.text.trim();
+
+    if (amount <= 0 || concept.isEmpty) return;
+
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    try {
+      final newCharge = CreditCharge(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        creditId: widget.credit.id,
+        concept: concept,
+        amount: amount,
+        distributionMethod: _selectedMethod,
+        createdAt: DateTime.now(),
+        createdBy: 'Administrador',
+        notes: _notesCtrl.text.trim(),
+      );
+
+      final updatedCredit = widget.credit.applyExtraCharge(charge: newCharge);
+      widget.onSave(newCharge, updatedCredit);
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final amount = double.tryParse(_amountCtrl.text) ?? 0.0;
+    final pendingInsts = widget.credit.installments.where((i) => i.status != 'pagado').toList();
+    final dateFmt = DateFormat('dd/MM/yyyy');
+
+    final daysStep = widget.credit.paymentFrequency == 'diario'
+        ? 1
+        : widget.credit.paymentFrequency == 'quincenal'
+            ? 15
+            : widget.credit.paymentFrequency == 'mensual'
+                ? 30
+                : 7;
+
+    final lastDate = widget.credit.installments.isNotEmpty
+        ? widget.credit.installments.last.dueDate
+        : widget.credit.startDate;
+    final newInstallmentDate = lastDate.add(Duration(days: daysStep));
+
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Banner Informativo
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: ColorTokens.lightBrandPrimary.withAlpha(15),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: ColorTokens.lightBrandPrimary.withAlpha(50)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.info_outline, color: ColorTokens.lightBrandPrimary, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Este cargo extra aumentará la deuda total del crédito y se distribuirá en el plan de pagos según tu elección.',
+                    style: FontTokens.bodySmall.copyWith(
+                      color: ColorTokens.lightBrandPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Selector de Motivos Rápidos
+          Text('MOTIVO / CONCEPTO DEL CARGO', style: FontTokens.label.copyWith(color: ColorTokens.lightTextSecondary, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: _quickConcepts.map((c) {
+              final isSelected = _conceptCtrl.text.trim() == (c == 'Otro motivo' ? '' : c);
+              return ChoiceChip(
+                label: Text(c),
+                selected: isSelected,
+                selectedColor: ColorTokens.lightBrandPrimary.withAlpha(30),
+                backgroundColor: Colors.white,
+                labelStyle: FontTokens.bodySmall.copyWith(
+                  color: isSelected ? ColorTokens.lightBrandPrimary : ColorTokens.lightTextPrimary,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                ),
+                side: BorderSide(
+                  color: isSelected ? ColorTokens.lightBrandPrimary : ColorTokens.lightBorderSubtle,
+                ),
+                onSelected: (val) {
+                  setState(() {
+                    if (c == 'Otro motivo') {
+                      _conceptCtrl.text = '';
+                    } else {
+                      _conceptCtrl.text = c;
+                    }
+                  });
+                },
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 10),
+
+          // Campo de Concepto Libre
+          CustomTextField(
+            label: 'Concepto Personalizado',
+            hint: 'Ej: Recargo por mora, Prenda extra: Blusa Seda',
+            controller: _conceptCtrl,
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 14),
+
+          // Campo de Monto
+          CustomMoneyInput(
+            label: 'Valor del Cargo Extra (\$ COP)',
+            hint: '50000',
+            controller: _amountCtrl,
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 18),
+
+          // Métodos de Distribución con Explicación Detallada
+          Text(
+            '¿CÓMO DESEAS APLICAR ESTE CARGO EN LAS CUOTAS?',
+            style: FontTokens.label.copyWith(
+              color: ColorTokens.lightBrandPrimary,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Elige uno de los 3 métodos para saber exactamente cómo se recalculará el crédito:',
+            style: FontTokens.bodySmall.copyWith(color: ColorTokens.lightTextSecondary),
+          ),
+          const SizedBox(height: 12),
+
+          // Método 1: Prorrateo en cuotas pendientes
+          _buildMethodCard(
+            methodKey: 'distribute_remaining',
+            title: '1. Repartir entre cuotas pendientes',
+            badgeText: 'Recomendado',
+            icon: Icons.call_split_rounded,
+            explanation: 'Divide el recargo en partes iguales entre las cuotas no pagadas. Mantiene exactamente el mismo plazo y número de cuotas del crédito.',
+            simulationText: amount > 0 && pendingInsts.isNotEmpty
+                ? '⚡ Simulación: Cada una de las ${pendingInsts.length} cuotas pendientes aumentará en +${CurrencyUtils.format(amount / pendingInsts.length)}.'
+                : null,
+          ),
+          const SizedBox(height: 8),
+
+          // Método 2: Nueva cuota al final
+          _buildMethodCard(
+            methodKey: 'add_installment',
+            title: '2. Crear nueva cuota al final',
+            badgeText: 'Alarga Plazo',
+            icon: Icons.add_circle_outline_rounded,
+            explanation: 'Conserva el valor de las cuotas actuales intacto y añade una cuota adicional (Cuota #${widget.credit.installments.length + 1}) al final del crédito.',
+            simulationText: amount > 0
+                ? '⚡ Simulación: Se creará la Cuota #${widget.credit.installments.length + 1} por ${CurrencyUtils.format(amount)} para la fecha ${dateFmt.format(newInstallmentDate)}.'
+                : null,
+          ),
+          const SizedBox(height: 8),
+
+          // Método 3: Sumar a la siguiente cuota inmediata
+          _buildMethodCard(
+            methodKey: 'next_installment',
+            title: '3. Cargar a la próxima cuota a vencer',
+            badgeText: 'Inmediato',
+            icon: Icons.arrow_forward_rounded,
+            explanation: 'Carga el 100% del recargo únicamente a la siguiente cuota más cercana por vencer. Las cuotas posteriores no sufren ningún cambio.',
+            simulationText: amount > 0 && pendingInsts.isNotEmpty
+                ? '⚡ Simulación: La Cuota #${pendingInsts.first.quotaNumber} (${dateFmt.format(pendingInsts.first.dueDate)}) pasará de ${CurrencyUtils.format(pendingInsts.first.quotaValue)} a ${CurrencyUtils.format(pendingInsts.first.quotaValue + amount)}.'
+                : null,
+          ),
+          const SizedBox(height: 16),
+
+          // Observaciones Opcionales
+          CustomTextField(
+            label: 'Observaciones / Notas del Recargo (Opcional)',
+            hint: 'Motivo específico, número de autorización...',
+            controller: _notesCtrl,
+          ),
+          const SizedBox(height: 16),
+
+          // Resumen de Impacto en Balance
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: ColorTokens.lightBgSecondary,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: ColorTokens.lightBorderSubtle),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('TOTAL DEL CRÉDITO:', style: FontTokens.label.copyWith(color: ColorTokens.lightTextSecondary)),
+                    Text(
+                      '${CurrencyUtils.format(widget.credit.totalSale)} ➔ ${CurrencyUtils.format(widget.credit.totalSale + amount)}',
+                      style: FontTokens.bodyMedium.copyWith(fontWeight: FontWeight.bold, color: ColorTokens.lightTextPrimary),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('NUEVO SALDO PENDIENTE:', style: FontTokens.label.copyWith(color: ColorTokens.lightBrandPrimary, fontWeight: FontWeight.bold)),
+                    Text(
+                      CurrencyUtils.format(widget.credit.pendingBalance + amount),
+                      style: FontTokens.moneyMedium.copyWith(color: ColorTokens.lightBrandPrimary, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Botón de Aplicar Cargo
+          CustomButton(
+            text: amount > 0 ? 'Aplicar cargo · ${CurrencyUtils.format(amount)}' : 'Ingresa el monto del cargo',
+            icon: Icons.check_circle_outline,
+            isLoading: _isSubmitting,
+            onPressed: amount > 0 && _conceptCtrl.text.trim().isNotEmpty ? _submitCharge : null,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMethodCard({
+    required String methodKey,
+    required String title,
+    required String badgeText,
+    required IconData icon,
+    required String explanation,
+    String? simulationText,
+  }) {
+    final isSelected = _selectedMethod == methodKey;
+
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _selectedMethod = methodKey;
+        });
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isSelected ? ColorTokens.lightBrandPrimary.withAlpha(12) : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? ColorTokens.lightBrandPrimary : ColorTokens.lightBorderSubtle,
+            width: isSelected ? 2 : 1,
+          ),
+          boxShadow: isSelected ? BorderShadowTokens.shadow3DCard : null,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  icon,
+                  size: 20,
+                  color: isSelected ? ColorTokens.lightBrandPrimary : ColorTokens.lightTextSecondary,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: FontTokens.bodyMedium.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: isSelected ? ColorTokens.lightBrandPrimary : ColorTokens.lightTextPrimary,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: isSelected ? ColorTokens.lightBrandPrimary : ColorTokens.lightBgSecondary,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    badgeText,
+                    style: FontTokens.label.copyWith(
+                      fontSize: 8.5,
+                      fontWeight: FontWeight.bold,
+                      color: isSelected ? Colors.white : ColorTokens.lightTextSecondary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              explanation,
+              style: FontTokens.bodySmall.copyWith(
+                fontSize: 11.5,
+                color: ColorTokens.lightTextSecondary,
+                height: 1.3,
+              ),
+            ),
+            if (simulationText != null) ...[
+              const SizedBox(height: 6),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isSelected ? ColorTokens.lightBrandPrimary.withAlpha(20) : ColorTokens.lightBgSecondary,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  simulationText,
+                  style: FontTokens.bodySmall.copyWith(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.bold,
+                    color: isSelected ? ColorTokens.lightBrandPrimary : ColorTokens.lightTextPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+

@@ -53,6 +53,50 @@ class CreditInstallment {
   }
 }
 
+class CreditCharge {
+  final String id;
+  final String creditId;
+  final String concept;
+  final double amount;
+  final String distributionMethod; // 'distribute_remaining' | 'add_installment' | 'next_installment'
+  final DateTime createdAt;
+  final String createdBy;
+  final String notes;
+
+  const CreditCharge({
+    required this.id,
+    required this.creditId,
+    required this.concept,
+    required this.amount,
+    required this.distributionMethod,
+    required this.createdAt,
+    this.createdBy = 'Administrador',
+    this.notes = '',
+  });
+
+  CreditCharge copyWith({
+    String? id,
+    String? creditId,
+    String? concept,
+    double? amount,
+    String? distributionMethod,
+    DateTime? createdAt,
+    String? createdBy,
+    String? notes,
+  }) {
+    return CreditCharge(
+      id: id ?? this.id,
+      creditId: creditId ?? this.creditId,
+      concept: concept ?? this.concept,
+      amount: amount ?? this.amount,
+      distributionMethod: distributionMethod ?? this.distributionMethod,
+      createdAt: createdAt ?? this.createdAt,
+      createdBy: createdBy ?? this.createdBy,
+      notes: notes ?? this.notes,
+    );
+  }
+}
+
 class Credit {
   final String id;
   final String clientName;
@@ -65,6 +109,7 @@ class Credit {
   final int totalQuotas;
   final double quotaValue;
   final List<CreditInstallment> installments;
+  final List<CreditCharge> charges;
   final String generalNotes;
 
   const Credit({
@@ -79,6 +124,7 @@ class Credit {
     required this.totalQuotas,
     required this.quotaValue,
     required this.installments,
+    this.charges = const [],
     required this.generalNotes,
   });
 
@@ -94,6 +140,7 @@ class Credit {
     int? totalQuotas,
     double? quotaValue,
     List<CreditInstallment>? installments,
+    List<CreditCharge>? charges,
     String? generalNotes,
   }) {
     return Credit(
@@ -108,11 +155,14 @@ class Credit {
       totalQuotas: totalQuotas ?? this.totalQuotas,
       quotaValue: quotaValue ?? this.quotaValue,
       installments: installments ?? this.installments,
+      charges: charges ?? this.charges,
       generalNotes: generalNotes ?? this.generalNotes,
     );
   }
 
   double get totalPaid => installments.fold(0.0, (sum, item) => sum + item.paidAmount);
+
+  double get totalExtraCharges => charges.fold(0.0, (sum, item) => sum + item.amount);
 
   double get pendingBalance => (totalSale - totalPaid).clamp(0.0, double.infinity);
 
@@ -131,6 +181,108 @@ class Credit {
     if (pending.isEmpty) return null;
     pending.sort((a, b) => a.dueDate.compareTo(b.dueDate));
     return pending.first;
+  }
+
+  /// Aplica un cargo extra al crédito y recalcula las cuotas según el método elegido
+  Credit applyExtraCharge({
+    required CreditCharge charge,
+  }) {
+    final newTotalSale = totalSale + charge.amount;
+    final newCharges = List<CreditCharge>.from(charges)..add(charge);
+    final updatedInsts = List<CreditInstallment>.from(installments);
+
+    final daysStep = paymentFrequency == 'diario'
+        ? 1
+        : paymentFrequency == 'quincenal'
+            ? 15
+            : paymentFrequency == 'mensual'
+                ? 30
+                : 7;
+
+    int newTotalQuotas = totalQuotas;
+
+    if (charge.distributionMethod == 'add_installment') {
+      // Opción: Crear una nueva cuota al final
+      final lastDate = updatedInsts.isNotEmpty ? updatedInsts.last.dueDate : startDate;
+      final newDueDate = lastDate.add(Duration(days: daysStep));
+      final nextNumber = updatedInsts.isNotEmpty ? updatedInsts.last.quotaNumber + 1 : 1;
+
+      updatedInsts.add(
+        CreditInstallment(
+          quotaNumber: nextNumber,
+          dueDate: newDueDate,
+          quotaValue: charge.amount,
+          paidAmount: 0.0,
+          paymentMethod: '',
+          notes: 'Cargo extra: ${charge.concept}',
+        ),
+      );
+      newTotalQuotas = updatedInsts.length;
+    } else if (charge.distributionMethod == 'next_installment') {
+      // Opción: Cargar todo a la siguiente cuota inmediata no pagada
+      final pendingIdx = updatedInsts.indexWhere((i) => i.status != 'pagado');
+      if (pendingIdx >= 0) {
+        final target = updatedInsts[pendingIdx];
+        final existingNote = target.notes.isNotEmpty ? '${target.notes} | ' : '';
+        updatedInsts[pendingIdx] = target.copyWith(
+          quotaValue: target.quotaValue + charge.amount,
+          notes: '$existingNote+Recargo: ${charge.concept} (\$${charge.amount.toInt()})',
+        );
+      } else {
+        // Si no hay pendientes, añadir al final
+        final lastDate = updatedInsts.isNotEmpty ? updatedInsts.last.dueDate : startDate;
+        updatedInsts.add(
+          CreditInstallment(
+            quotaNumber: updatedInsts.length + 1,
+            dueDate: lastDate.add(Duration(days: daysStep)),
+            quotaValue: charge.amount,
+            paidAmount: 0.0,
+            paymentMethod: '',
+            notes: 'Cargo extra: ${charge.concept}',
+          ),
+        );
+        newTotalQuotas = updatedInsts.length;
+      }
+    } else {
+      // Opción por defecto: 'distribute_remaining' (Prorrateo entre cuotas pendientes)
+      final pendingIndices = <int>[];
+      for (int i = 0; i < updatedInsts.length; i++) {
+        if (updatedInsts[i].status != 'pagado') {
+          pendingIndices.add(i);
+        }
+      }
+
+      if (pendingIndices.isNotEmpty) {
+        final portion = charge.amount / pendingIndices.length;
+        for (final idx in pendingIndices) {
+          final target = updatedInsts[idx];
+          updatedInsts[idx] = target.copyWith(
+            quotaValue: target.quotaValue + portion,
+          );
+        }
+      } else {
+        // Si todas estaban pagadas, añadir una nueva cuota
+        final lastDate = updatedInsts.isNotEmpty ? updatedInsts.last.dueDate : startDate;
+        updatedInsts.add(
+          CreditInstallment(
+            quotaNumber: updatedInsts.length + 1,
+            dueDate: lastDate.add(Duration(days: daysStep)),
+            quotaValue: charge.amount,
+            paidAmount: 0.0,
+            paymentMethod: '',
+            notes: 'Cargo extra: ${charge.concept}',
+          ),
+        );
+        newTotalQuotas = updatedInsts.length;
+      }
+    }
+
+    return copyWith(
+      totalSale: newTotalSale,
+      totalQuotas: newTotalQuotas,
+      installments: updatedInsts,
+      charges: newCharges,
+    );
   }
 
   static List<CreditInstallment> generateInstallments(

@@ -21,6 +21,17 @@ export interface CreditInstallment {
   receipt_image_url?: string;
 }
 
+export interface CreditCharge {
+  id: string;
+  credit_id: string;
+  concept: string;
+  amount: number;
+  distribution_method: string;
+  created_at: string;
+  created_by?: string;
+  notes?: string;
+}
+
 export interface Credit {
   id: string;
   customer_id?: string;
@@ -39,4 +50,6 @@ export interface Credit {
   notes?: string;
   created_at: string;
   installments: CreditInstallment[];
+  charges?: CreditCharge[];
 }
+
