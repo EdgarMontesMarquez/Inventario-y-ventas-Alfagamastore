@@ -48,4 +48,6 @@ app.*.map.json
 .env
 .env.*
 node_modules
+server/serviceAccountKey.json
+*serviceAccountKey.json
 

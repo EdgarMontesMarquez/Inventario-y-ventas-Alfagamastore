@@ -283,4 +283,5 @@ CREATE TABLE IF NOT EXISTS public.user_device_tokens (
 
 ALTER TABLE public.user_device_tokens ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow authenticated access to user_device_tokens" ON public.user_device_tokens FOR ALL USING (auth.role() = 'authenticated');
+CREATE POLICY "Allow public read access to user_device_tokens" ON public.user_device_tokens FOR SELECT USING (true);
 

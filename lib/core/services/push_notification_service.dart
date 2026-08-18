@@ -93,6 +93,16 @@ class PushNotificationService {
     }
   }
 
+  /// Obtiene el token FCM del dispositivo actual
+  Future<String?> getDeviceToken() async {
+    try {
+      return await FirebaseMessaging.instance.getToken();
+    } catch (e) {
+      debugPrint('Error al obtener token FCM: $e');
+      return null;
+    }
+  }
+
   /// Sincroniza el FCM Token del dispositivo con el perfil del usuario en Supabase
   Future<void> syncDeviceToken(String userId) async {
     try {

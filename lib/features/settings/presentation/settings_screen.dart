@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/design_system/tokens/color_tokens.dart';
 import '../../../core/design_system/tokens/font_tokens.dart';
 import '../../../core/design_system/tokens/border_shadow_tokens.dart';
 import '../../../core/design_system/widgets/custom_buttons.dart';
 import '../../../core/design_system/widgets/custom_inputs.dart';
+import '../../../core/services/push_notification_service.dart';
 import '../../../shared/widgets/app_logo.dart';
 import '../../../shared/providers/settings_provider.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -299,6 +301,86 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     subtitle: Text('Crear usuarios, asignar permisos y cambiar roles (Empleado vs Admin)', style: FontTokens.bodySmall.copyWith(color: ColorTokens.lightTextSecondary, fontSize: 11)),
                     trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: ColorTokens.lightTextSecondary),
                     onTap: () => context.push('/user-management'),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  decoration: BoxDecoration(
+                    color: ColorTokens.lightSurfacePrimary,
+                    border: Border.all(color: ColorTokens.lightBorderSubtle),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: BorderShadowTokens.shadow3DCard,
+                  ),
+                  child: ListTile(
+                    tileColor: ColorTokens.lightSurfacePrimary,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    leading: const Icon(Icons.notifications_active_outlined, color: ColorTokens.lightBrandPrimary),
+                    title: Text('Diagnóstico de Notificaciones Push', style: FontTokens.bodyLarge.copyWith(color: ColorTokens.lightTextPrimary, fontWeight: FontWeight.bold)),
+                    subtitle: Text('Verificar token FCM del dispositivo y estado de sincronización', style: FontTokens.bodySmall.copyWith(color: ColorTokens.lightTextSecondary, fontSize: 11)),
+                    trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: ColorTokens.lightTextSecondary),
+                    onTap: () async {
+                      final token = await PushNotificationService().getDeviceToken();
+                      if (!context.mounted) return;
+                      showDialog(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          title: const Row(
+                            children: [
+                              Icon(Icons.mark_email_read_outlined, color: ColorTokens.lightBrandPrimary),
+                              SizedBox(width: 8),
+                              Text('Token Push del Dispositivo', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                          content: SingleChildScrollView(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Estado:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                Text(token != null && token.isNotEmpty ? '✅ Conectado a Firebase' : '⚠️ No se pudo obtener token', style: TextStyle(color: token != null ? Colors.green : Colors.red, fontSize: 13)),
+                                const SizedBox(height: 12),
+                                const Text('Token FCM para Pruebas Directas:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                const SizedBox(height: 4),
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade100,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: Colors.grey.shade300),
+                                  ),
+                                  child: SelectableText(
+                                    token ?? 'Sin token disponible. Verifica permisos.',
+                                    style: const TextStyle(fontSize: 10, fontFamily: 'monospace'),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () async {
+                                final client = Supabase.instance.client;
+                                final uid = client.auth.currentUser?.id;
+                                if (uid != null) {
+                                  await PushNotificationService().syncDeviceToken(uid);
+                                  if (ctx.mounted) {
+                                    ScaffoldMessenger.of(ctx).showSnackBar(
+                                      const SnackBar(content: Text('Token resincronizado con Supabase ✅')),
+                                    );
+                                  }
+                                }
+                              },
+                              child: const Text('Re-sincronizar'),
+                            ),
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              child: const Text('Cerrar'),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
                 ),
               ],

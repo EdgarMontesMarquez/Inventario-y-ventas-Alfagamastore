@@ -38,7 +38,7 @@ try {
 }
 
 // 2. Inicialización de cliente Supabase
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://xwhqymuvzfxwsvtggzts.supabase.co';
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://kpgkoltwzorznfshwwiv.supabase.co';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!SUPABASE_SERVICE_ROLE_KEY) {
