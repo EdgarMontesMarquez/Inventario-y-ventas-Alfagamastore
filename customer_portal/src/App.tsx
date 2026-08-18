@@ -954,7 +954,7 @@ export function App() {
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-bold text-white">ALFA GAMA STORE</span>
-                <span className="text-[10px] bg-slate-800 text-slate-300 font-mono px-2 py-0.5 rounded-md border border-slate-700">v1.0.5</span>
+                <span className="text-[10px] bg-slate-800 text-slate-300 font-mono px-2 py-0.5 rounded-md border border-slate-700">v1.0.6</span>
               </div>
               <p className="text-slate-500 text-[11px]">Moda, Calidad y Estilo</p>
             </div>
