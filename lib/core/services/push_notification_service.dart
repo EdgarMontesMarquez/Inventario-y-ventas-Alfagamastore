@@ -1,6 +1,7 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../navigation/app_router.dart';
 
@@ -40,10 +41,33 @@ class PushNotificationService {
       // Manejar mensajes cuando la app está abierta en primer plano (Foreground)
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
         debugPrint('Notificación recibida en primer plano: ${message.notification?.title}');
-        // Si hay contexto, podemos mostrar un SnackBar o banner discreto
-        final context = rootNavigatorKey.currentContext;
-        if (context != null && message.notification != null) {
-          // El usuario puede ver la alerta
+        if (message.notification != null) {
+          rootScaffoldMessengerKey.currentState?.showSnackBar(
+            SnackBar(
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    message.notification?.title ?? 'Notificación Alfa Gama Store',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    message.notification?.body ?? '',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ],
+              ),
+              backgroundColor: const Color(0xFF0D1A33),
+              duration: const Duration(seconds: 5),
+              action: SnackBarAction(
+                label: 'VER',
+                textColor: const Color(0xFF0066FF),
+                onPressed: () => _handleNotificationClick(message),
+              ),
+            ),
+          );
         }
       });
 

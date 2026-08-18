@@ -71,7 +71,7 @@ class _CustomButtonState extends State<CustomButton> {
             disabledForegroundColor: ColorTokens.lightTextDisabled,
             elevation: widget.isSecondary || widget.isGhost ? 0 : 2,
             shadowColor: ColorTokens.lightBrandPrimary.withAlpha(80),
-            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(BorderShadowTokens.radiusPill),
               side: border,
@@ -91,15 +91,19 @@ class _CustomButtonState extends State<CustomButton> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     if (widget.icon != null) ...[
-                      Icon(widget.icon, size: 18),
-                      const SizedBox(width: 8),
+                      Icon(widget.icon, size: 16),
+                      const SizedBox(width: 6),
                     ],
-                    Text(
-                      widget.text,
-                      style: FontTokens.button.copyWith(
-                        color: isEnabled ? fg : ColorTokens.lightTextDisabled,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15,
+                    Flexible(
+                      child: Text(
+                        widget.text,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: FontTokens.button.copyWith(
+                          color: isEnabled ? fg : ColorTokens.lightTextDisabled,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                        ),
                       ),
                     ),
                   ],

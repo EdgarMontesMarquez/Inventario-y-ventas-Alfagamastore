@@ -24,6 +24,7 @@ import '../../features/auth/presentation/splash_screen.dart';
 
 final rootNavigatorKey = GlobalKey<NavigatorState>();
 final shellNavigatorKey = GlobalKey<NavigatorState>();
+final rootScaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authListenable = ValueNotifier<AuthStateData>(ref.read(authProvider));

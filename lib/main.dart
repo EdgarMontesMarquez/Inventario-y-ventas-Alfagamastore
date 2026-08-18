@@ -41,6 +41,7 @@ class MyApp extends ConsumerWidget {
       theme: AppTheme.lightTheme,
       themeMode: ThemeMode.light,
       routerConfig: router,
+      scaffoldMessengerKey: rootScaffoldMessengerKey,
     );
 
   }

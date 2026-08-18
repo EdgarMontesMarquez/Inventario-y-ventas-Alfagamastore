@@ -826,7 +826,7 @@ class CreditDetailScreen extends ConsumerWidget {
                   Row(
                     children: [
                       Expanded(
-                        flex: 3,
+                        flex: 5,
                         child: CustomButton(
                           text: 'Registrar pago',
                           icon: Icons.check_circle_outline,
@@ -836,7 +836,7 @@ class CreditDetailScreen extends ConsumerWidget {
                       if (authState.isAdmin) ...[
                         const SizedBox(width: 8),
                         Expanded(
-                          flex: 2,
+                          flex: 4,
                           child: CustomButton(
                             text: 'Cargo Extra',
                             icon: Icons.add_card_outlined,
