@@ -810,7 +810,12 @@ export function App() {
                                       Cuota #{inst.number}
                                     </td>
                                     <td className="py-3 px-3.5 text-[#475569] font-medium">
-                                      {formatDate(inst.due_date)}
+                                      <div>{formatDate(inst.due_date)}</div>
+                                      {inst.paid_at && (inst.is_paid || (inst.paid_amount && inst.paid_amount > 0)) && (
+                                        <div className="text-[10px] font-semibold text-[#047857]">
+                                          Pagó: {formatDate(inst.paid_at)}
+                                        </div>
+                                      )}
                                     </td>
                                     <td className="py-3 px-3.5 font-extrabold text-[#0A192F] font-mono-finance">
                                       {formatCurrency(inst.amount)}

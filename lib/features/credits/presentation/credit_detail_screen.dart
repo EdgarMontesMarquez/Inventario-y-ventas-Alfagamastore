@@ -450,7 +450,14 @@ class CreditDetailScreen extends ConsumerWidget {
                         ),
                         pw.Padding(
                           padding: const pw.EdgeInsets.all(4),
-                          child: pw.Text(df.format(inst.dueDate), style: const pw.TextStyle(fontSize: 7.5)),
+                          child: pw.Column(
+                            crossAxisAlignment: pw.CrossAxisAlignment.start,
+                            children: [
+                              pw.Text(df.format(inst.dueDate), style: const pw.TextStyle(fontSize: 7.5)),
+                              if (inst.paidDate != null && inst.paidAmount > 0)
+                                pw.Text('Pagó: ${df.format(inst.paidDate!)}', style: const pw.TextStyle(fontSize: 6.5, color: PdfColors.green800)),
+                            ],
+                          ),
                         ),
                         pw.Padding(
                           padding: const pw.EdgeInsets.all(4),
@@ -1211,6 +1218,7 @@ class _RegisterPaymentSheetState extends State<_RegisterPaymentSheet> {
   late final TextEditingController _notesCtrl;
   String _paymentMethod = 'efectivo';
   String? _receiptImageUrl;
+  DateTime _selectedPaymentDate = DateTime.now();
 
   @override
   void initState() {
@@ -1222,6 +1230,7 @@ class _RegisterPaymentSheetState extends State<_RegisterPaymentSheet> {
     final initialQuotaValue = widget.credit.installments[_selectedQuotaIdx].quotaValue;
     _amountCtrl = TextEditingController(text: initialQuotaValue.toInt().toString());
     _notesCtrl = TextEditingController();
+    _selectedPaymentDate = DateTime.now();
   }
 
   @override
@@ -1248,7 +1257,7 @@ class _RegisterPaymentSheetState extends State<_RegisterPaymentSheet> {
 
       updatedInstallments[_selectedQuotaIdx] = targetInst.copyWith(
         paidAmount: targetInst.paidAmount + amount,
-        paidDate: DateTime.now(),
+        paidDate: _selectedPaymentDate,
         paymentMethod: _paymentMethod,
         notes: _notesCtrl.text.trim(),
         receiptImageUrl: _paymentMethod == 'transferencia' ? _receiptImageUrl : null,
@@ -1353,6 +1362,79 @@ class _RegisterPaymentSheetState extends State<_RegisterPaymentSheet> {
             hint: '250000',
             controller: _amountCtrl,
             onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 14),
+
+          // Selector de Fecha Real de Pago
+          Text(
+            'FECHA EN QUE SE REALIZÓ EL PAGO',
+            style: FontTokens.label.copyWith(color: ColorTokens.lightTextSecondary, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 6),
+          InkWell(
+            onTap: () async {
+              final pickedDate = await showDatePicker(
+                context: context,
+                initialDate: _selectedPaymentDate,
+                firstDate: DateTime(2020),
+                lastDate: DateTime.now().add(const Duration(days: 365)),
+                builder: (context, child) {
+                  return Theme(
+                    data: Theme.of(context).copyWith(
+                      colorScheme: const ColorScheme.light(
+                        primary: ColorTokens.lightBrandPrimary,
+                        onPrimary: Colors.white,
+                        onSurface: ColorTokens.lightTextPrimary,
+                      ),
+                    ),
+                    child: child!,
+                  );
+                },
+              );
+              if (pickedDate != null) {
+                setState(() {
+                  _selectedPaymentDate = DateTime(
+                    pickedDate.year,
+                    pickedDate.month,
+                    pickedDate.day,
+                    DateTime.now().hour,
+                    DateTime.now().minute,
+                    DateTime.now().second,
+                  );
+                });
+              }
+            },
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: ColorTokens.lightBorderSubtle),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.calendar_today_outlined, size: 18, color: ColorTokens.lightBrandPrimary),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          dateFmt.format(_selectedPaymentDate),
+                          style: FontTokens.bodyMedium.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          'Toca para cambiar la fecha si pagó antes o después',
+                          style: FontTokens.label.copyWith(color: ColorTokens.lightTextSecondary, fontSize: 10),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.edit_calendar_outlined, size: 18, color: ColorTokens.lightTextSecondary),
+                ],
+              ),
+            ),
           ),
           const SizedBox(height: 14),
 

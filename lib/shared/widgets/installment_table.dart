@@ -107,12 +107,27 @@ class InstallmentTable extends StatelessWidget {
                       ),
                     ),
                     DataCell(
-                      Text(
-                        dateFmt.format(inst.dueDate),
-                        style: textStyle.copyWith(
-                          color: s == 'vencido' ? ColorTokens.statusDanger : textMuted,
-                          fontSize: 11,
-                        ),
+                      Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            dateFmt.format(inst.dueDate),
+                            style: textStyle.copyWith(
+                              color: s == 'vencido' ? ColorTokens.statusDanger : textMuted,
+                              fontSize: 11,
+                            ),
+                          ),
+                          if (inst.paidDate != null && inst.paidAmount > 0)
+                            Text(
+                              'Pagó: ${dateFmt.format(inst.paidDate!)}',
+                              style: textStyle.copyWith(
+                                color: ColorTokens.statusSuccess,
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                     DataCell(

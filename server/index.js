@@ -129,20 +129,42 @@ async function checkAndSendCollectionNotifications() {
       return { message: 'Cartera al día y sin cobros programados para hoy' };
     }
 
-    // Consultar los tokens FCM de los administradores registrados
-    const { data: adminProfiles, error: profilesError } = await supabase
-      .from('profiles')
-      .select('id, full_name, fcm_token, role')
-      .not('fcm_token', 'is', null);
+    // Consultar los tokens FCM de los administradores y dispositivos registrados
+    const tokensSet = new Set();
 
-    if (profilesError) {
-      console.error('❌ Error al consultar tokens de perfiles:', profilesError.message);
-      return { error: profilesError.message };
+    // 1. Desde profiles
+    try {
+      const { data: adminProfiles } = await supabase
+        .from('profiles')
+        .select('id, full_name, fcm_token, role')
+        .not('fcm_token', 'is', null);
+
+      (adminProfiles || []).forEach(p => {
+        if (p.fcm_token && typeof p.fcm_token === 'string' && p.fcm_token.trim().length > 10) {
+          tokensSet.add(p.fcm_token.trim());
+        }
+      });
+    } catch (e) {
+      console.warn('⚠️ Error al leer profiles:', e.message);
     }
 
-    const validTokens = (adminProfiles || [])
-      .map(p => p.fcm_token)
-      .filter(token => typeof token === 'string' && token.trim().length > 10);
+    // 2. Desde user_device_tokens (si existe)
+    try {
+      const { data: deviceTokens } = await supabase
+        .from('user_device_tokens')
+        .select('fcm_token')
+        .not('fcm_token', 'is', null);
+
+      (deviceTokens || []).forEach(d => {
+        if (d.fcm_token && typeof d.fcm_token === 'string' && d.fcm_token.trim().length > 10) {
+          tokensSet.add(d.fcm_token.trim());
+        }
+      });
+    } catch (e) {
+      // Ignorar si la tabla no ha sido creada
+    }
+
+    const validTokens = Array.from(tokensSet);
 
     if (validTokens.length === 0) {
       console.log('⚠️ No hay tokens FCM de administradores registrados en la base de datos.');
@@ -212,6 +234,72 @@ app.get('/', (req, res) => {
     app: 'Alfa Gama Store - Notification & Collection Backend',
     time: new Date().toISOString(),
   });
+});
+
+// Endpoint de prueba directa para validar si las notificaciones push llegan a los dispositivos
+app.post('/api/test-notification', async (req, res) => {
+  try {
+    const { title, body, token } = req.body;
+    let targetTokens = [];
+
+    if (token) {
+      targetTokens = [token];
+    } else {
+      // Recoger todos los tokens disponibles
+      const tokensSet = new Set();
+      try {
+        const { data: profiles } = await supabase.from('profiles').select('fcm_token').not('fcm_token', 'is', null);
+        (profiles || []).forEach(p => p.fcm_token && tokensSet.add(p.fcm_token.trim()));
+      } catch (_) {}
+
+      try {
+        const { data: devices } = await supabase.from('user_device_tokens').select('fcm_token').not('fcm_token', 'is', null);
+        (devices || []).forEach(d => d.fcm_token && tokensSet.add(d.fcm_token.trim()));
+      } catch (_) {}
+
+      targetTokens = Array.from(tokensSet);
+    }
+
+    if (targetTokens.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No hay tokens FCM registrados en la base de datos para enviar la prueba.',
+      });
+    }
+
+    const payload = {
+      tokens: targetTokens,
+      notification: {
+        title: title || '🧪 Prueba de Notificación · Alfa Gama Store',
+        body: body || '¡Hola! Esta es una notificación de prueba para verificar que el sistema push funciona al 100%.',
+      },
+      data: {
+        route: '/collection-center',
+        type: 'test',
+        click_action: 'FLUTTER_NOTIFICATION_CLICK',
+      },
+      android: {
+        priority: 'high',
+        notification: {
+          sound: 'default',
+          channelId: 'alfa_gama_cobranza',
+          color: '#0D1A33',
+        },
+      },
+    };
+
+    const response = await admin.messaging().sendEachForMulticast(payload);
+    return res.json({
+      success: true,
+      totalDevices: targetTokens.length,
+      successCount: response.successCount,
+      failureCount: response.failureCount,
+      responses: response.responses,
+    });
+  } catch (err) {
+    console.error('❌ Error en /api/test-notification:', err);
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 // Endpoint para disparar la revisión manualmente o por Webhook externo

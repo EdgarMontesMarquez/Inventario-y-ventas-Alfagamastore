@@ -31,7 +31,9 @@ CREATE TABLE public.profiles (
     email VARCHAR(255) NOT NULL,
     full_name VARCHAR(200) NOT NULL DEFAULT 'Administrador Alfa Gama Store',
     role VARCHAR(50) NOT NULL DEFAULT 'super_admin', -- 'super_admin' | 'cajero'
+    fcm_token TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     sound_on_scan BOOLEAN NOT NULL DEFAULT TRUE,
     auto_print_receipt BOOLEAN NOT NULL DEFAULT TRUE
 );
@@ -269,4 +271,16 @@ CREATE POLICY "Allow public read access to customers" ON public.customers FOR SE
 CREATE POLICY "Allow public read access to credits" ON public.credits FOR SELECT USING (true);
 CREATE POLICY "Allow public read access to credit_installments" ON public.credit_installments FOR SELECT USING (true);
 CREATE POLICY "Allow public read access to credit_charges" ON public.credit_charges FOR SELECT USING (true);
+
+-- 15. TABLA DE DISPOSITIVOS Y TOKENS FCM PUSH (USER_DEVICE_TOKENS)
+CREATE TABLE IF NOT EXISTS public.user_device_tokens (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    fcm_token TEXT UNIQUE NOT NULL,
+    platform VARCHAR(50) DEFAULT 'web',
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+ALTER TABLE public.user_device_tokens ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow authenticated access to user_device_tokens" ON public.user_device_tokens FOR ALL USING (auth.role() = 'authenticated');
 
