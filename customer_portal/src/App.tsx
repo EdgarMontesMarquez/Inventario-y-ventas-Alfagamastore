@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
-import type { Credit, Customer } from './types';
+import type { Credit, Customer, CreditInstallment, CreditCharge } from './types/index';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { 
@@ -694,7 +694,7 @@ export function App() {
               </div>
 
               {/* Lista de Créditos */}
-              {credits.map((credit, idx) => {
+              {credits.map((credit: Credit, idx: number) => {
                 const pendingBalance = Math.max(0, credit.total_amount - credit.paid_amount);
                 const progressPct = credit.total_amount > 0 ? Math.min(100, (credit.paid_amount / credit.total_amount) * 100) : 0;
                 const isPaidFull = pendingBalance <= 0 || credit.status === 'finalizado';
@@ -801,7 +801,7 @@ export function App() {
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 bg-white">
-                              {credit.installments.map((inst) => {
+                              {credit.installments.map((inst: CreditInstallment) => {
                                 const hasReceipt = Boolean(inst.receipt_image_url && inst.receipt_image_url.trim().length > 0);
 
                                 return (
@@ -870,7 +870,7 @@ export function App() {
                             </span>
                           </h4>
                           <div className="space-y-2">
-                            {credit.charges.map((ch) => (
+                            {credit.charges.map((ch: CreditCharge) => (
                               <div key={ch.id} className="p-3 bg-[#F4F7FF] rounded-xl border border-[#BFDBFE] flex items-center justify-between text-xs">
                                 <div>
                                   <span className="font-bold text-[#0A192F] block">{ch.concept}</span>
