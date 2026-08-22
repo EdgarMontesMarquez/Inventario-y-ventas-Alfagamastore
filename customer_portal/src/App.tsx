@@ -182,7 +182,13 @@ function exportCustomerCreditToPDF(credit: Credit) {
   const getStatusText = (inst: any) => {
     if (inst.is_paid || inst.paid_amount >= inst.amount) return 'PAGADO';
     if (inst.paid_amount > 0) return 'PARCIAL';
-    if (inst.due_date && new Date(inst.due_date) < new Date()) return 'VENCIDO';
+    if (inst.due_date) {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const due = new Date(inst.due_date);
+      due.setHours(0, 0, 0, 0);
+      if (due < todayStart) return 'VENCIDO';
+    }
     return 'PENDIENTE';
   };
 

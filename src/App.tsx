@@ -52,10 +52,21 @@ const FREQ_LABELS: Record<string, string> = {
   semanal: 'Semanal', quincenal: 'Quincenal', mensual: 'Mensual',
 }
 
+const ensureDate = (dt: any): Date => {
+  if (!dt) return new Date()
+  if (dt instanceof Date) return isNaN(dt.getTime()) ? new Date() : dt
+  const parsed = new Date(dt)
+  return isNaN(parsed.getTime()) ? new Date() : parsed
+}
+
 function instStatus(inst: CreditInstallment): 'pagado' | 'parcial' | 'vencido' | 'pendiente' {
   if (inst.paidAmount >= inst.quotaValue) return 'pagado'
   if (inst.paidAmount > 0) return 'parcial'
-  if (inst.dueDate < new Date()) return 'vencido'
+  const todayStart = new Date()
+  todayStart.setHours(0, 0, 0, 0)
+  const due = new Date(ensureDate(inst.dueDate))
+  due.setHours(0, 0, 0, 0)
+  if (due < todayStart) return 'vencido'
   return 'pendiente'
 }
 function creditStatus(c: Credit): 'al_dia' | 'mora' | 'finalizado' {
@@ -66,7 +77,10 @@ function creditStatus(c: Credit): 'al_dia' | 'mora' | 'finalizado' {
 }
 function totalPaid(c: Credit) { return c.installments.reduce((s, i) => s + i.paidAmount, 0) }
 function pendingBalance(c: Credit) { return Math.max(0, c.totalSale - totalPaid(c)) }
-function progressPct(c: Credit) { return Math.min(100, (totalPaid(c) / c.totalSale) * 100) }
+function progressPct(c: Credit) {
+  if (!c.totalSale || c.totalSale <= 0) return 0
+  return Math.min(100, (totalPaid(c) / c.totalSale) * 100)
+}
 function nextDueInstallment(c: Credit): CreditInstallment | null {
   return c.installments.find(i => instStatus(i) !== 'pagado') ?? null
 }
@@ -78,16 +92,19 @@ function generateInstallments(
 ): CreditInstallment[] {
   return Array.from({ length: totalQuotas }, (_, i) => {
     const due = new Date(startDate)
-    if (frequency === 'semanal') due.setDate(startDate.getDate() + (i + 1) * 7)
-    else if (frequency === 'quincenal') due.setDate(startDate.getDate() + (i + 1) * 15)
-    else due.setMonth(startDate.getMonth() + (i + 1))
+    if (frequency === 'semanal') {
+      due.setDate(startDate.getDate() + (i + 1) * 7)
+    } else if (frequency === 'quincenal') {
+      due.setDate(startDate.getDate() + (i + 1) * 15)
+    } else {
+      const targetMonth = startDate.getMonth() + (i + 1)
+      const targetDay = startDate.getDate()
+      due.setMonth(targetMonth, 1)
+      const maxDaysInMonth = new Date(due.getFullYear(), due.getMonth() + 1, 0).getDate()
+      due.setDate(Math.min(targetDay, maxDaysInMonth))
+    }
     return { quotaNumber: i + 1, dueDate: due, quotaValue, paidAmount: 0, paidDate: null, paymentMethod: '', notes: '' }
   })
-}
-
-const ensureDate = (d: any): Date => {
-  if (d instanceof Date) return d
-  return new Date(d)
 }
 
 function exportToPDF(credit: Credit) {
@@ -689,7 +706,7 @@ function InventoryTab({ products, onAdd, onUpdate, onDelete }: { products: Produ
                   <StockBadge stock={p.stock} minStock={p.minStock} />
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  {[{ l: 'PRECIO', v: fmt(p.price), c: '#00e676' }, { l: 'COSTO', v: fmt(p.cost), c: '#888' }, { l: 'MARGEN', v: `${Math.round((p.price - p.cost) / p.price * 100)}%`, c: '#448aff' }].map(({ l, v, c }) => (
+                  {[{ l: 'PRECIO', v: fmt(p.price), c: '#00e676' }, { l: 'COSTO', v: fmt(p.cost), c: '#888' }, { l: 'MARGEN', v: p.price > 0 ? `${Math.round(((p.price - p.cost) / p.price) * 100)}%` : '0%', c: '#448aff' }].map(({ l, v, c }) => (
                     <div key={l}>
                       <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: '#555', marginBottom: 1 }}>{l}</div>
                       <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, fontWeight: 600, color: c }}>{v}</div>
@@ -722,7 +739,7 @@ function ProductForm({ initial, onSave, onDelete, onClose }: { initial: Product 
   const [minStock, setMinStock] = useState(initial?.minStock?.toString() ?? '5')
   const [category, setCategory] = useState(initial?.category ?? 'Abarrotes')
   const [showConfirmDelete, setShowConfirmDelete] = useState(false)
-  const valid = name.trim() && sku.trim() && Number(price) > 0
+  const valid = name.trim().length > 0 && sku.trim().length > 0 && Number(price) > 0 && Number(cost) >= 0 && Number(stock) >= 0
   return (
     <div className="fade-in" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 50, display: 'flex', alignItems: 'flex-end' }}>
       <div className="slide-up" style={{ background: '#0e0e0e', border: '1px solid #222', borderRadius: '20px 20px 0 0', width: '100%', maxHeight: '92vh', overflowY: 'auto', padding: '20px 16px 40px' }}>
@@ -864,10 +881,22 @@ function NewSaleModal({ products, onSave, onClose }: { products: Product[]; onSa
   const [note, setNote] = useState('')
   const [search, setSearch] = useState('')
   const available = products.filter(p => p.stock > 0)
-  const filtered = search ? available.filter(p => p.name.toLowerCase().includes(search.toLowerCase())) : available
+  const filtered = search ? available.filter(p => p.name.toLowerCase().includes(search.toLowerCase()) || p.sku.toLowerCase().includes(search.toLowerCase())) : available
   const total = lines.reduce((acc, l) => { const p = products.find(p => p.id === l.productId); return acc + (p ? p.price * l.qty : 0) }, 0)
   const validLines = lines.filter(l => l.productId && l.qty > 0)
   const pmColor = (m: string) => m === 'efectivo' ? '#00e676' : m === 'tarjeta' ? '#448aff' : '#ff9800'
+
+  const handleAddProduct = (p: Product) => {
+    const ex = lines.findIndex(l => l.productId === p.id)
+    if (ex >= 0) {
+      if (lines[ex].qty < p.stock) {
+        setLines(prev => prev.map((l, i) => i === ex ? { ...l, qty: l.qty + 1 } : l))
+      }
+    } else {
+      setLines(prev => [...prev, { productId: p.id, qty: 1 }])
+    }
+    setSearch('')
+  }
 
   return (
     <div className="fade-in" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 50, display: 'flex', alignItems: 'flex-end' }}>
@@ -885,8 +914,11 @@ function NewSaleModal({ products, onSave, onClose }: { products: Product[]; onSa
           {search && (
             <div style={{ background: '#141414', border: '1px solid #222', borderRadius: 8, marginBottom: 10, overflow: 'hidden' }}>
               {filtered.slice(0, 5).map(p => (
-                <button key={p.id} onClick={() => { const ex = lines.findIndex(l => l.productId === p.id); if (ex >= 0) setLines(prev => prev.map((l, i) => i === ex ? { ...l, qty: l.qty + 1 } : l)); else setLines(prev => [...prev, { productId: p.id, qty: 1 }]); setSearch('') }} style={{ width: '100%', background: 'transparent', border: 'none', borderBottom: '1px solid #1e1e1e', padding: '10px 12px', display: 'flex', justifyContent: 'space-between', cursor: 'pointer', color: '#f0f0f0' }}>
-                  <span style={{ fontSize: 13 }}>{p.name}</span>
+                <button key={p.id} onClick={() => handleAddProduct(p)} style={{ width: '100%', background: 'transparent', border: 'none', borderBottom: '1px solid #1e1e1e', padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', color: '#f0f0f0' }}>
+                  <div style={{ textAlign: 'left' }}>
+                    <div style={{ fontSize: 13 }}>{p.name}</div>
+                    <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: '#555' }}>Stock: {p.stock}</div>
+                  </div>
                   <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: '#00e676' }}>{fmt(p.price)}</span>
                 </button>
               ))}
@@ -896,16 +928,20 @@ function NewSaleModal({ products, onSave, onClose }: { products: Product[]; onSa
           {lines.map((line, i) => {
             const p = products.find(x => x.id === line.productId)
             if (!p) return null
+            const isAtMax = line.qty >= p.stock
             return (
               <div key={i} style={{ background: '#141414', border: '1px solid #1e1e1e', borderRadius: 10, padding: '10px 12px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
-                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#00e676', marginTop: 2 }}>{fmt(p.price * line.qty)}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+                    <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#00e676' }}>{fmt(p.price * line.qty)}</span>
+                    <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: '#555' }}>({fmt(p.price)} c/u · máx {p.stock})</span>
+                  </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
                   <button onClick={() => line.qty > 1 ? setLines(prev => prev.map((l, idx) => idx === i ? { ...l, qty: l.qty - 1 } : l)) : setLines(prev => prev.filter((_, idx) => idx !== i))} style={{ background: '#222', border: 'none', color: '#888', borderRadius: 6, width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><IconMinus /></button>
                   <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 15, fontWeight: 600, minWidth: 24, textAlign: 'center' }}>{line.qty}</span>
-                  <button onClick={() => setLines(prev => prev.map((l, idx) => idx === i ? { ...l, qty: l.qty + 1 } : l))} style={{ background: '#222', border: 'none', color: '#888', borderRadius: 6, width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><IconPlus size={16} /></button>
+                  <button onClick={() => { if (!isAtMax) setLines(prev => prev.map((l, idx) => idx === i ? { ...l, qty: l.qty + 1 } : l)) }} disabled={isAtMax} style={{ background: isAtMax ? '#181818' : '#222', border: 'none', color: isAtMax ? '#444' : '#888', borderRadius: 6, width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: isAtMax ? 'not-allowed' : 'pointer' }}><IconPlus size={16} /></button>
                   <button onClick={() => setLines(prev => prev.filter((_, idx) => idx !== i))} style={{ background: 'transparent', border: 'none', color: '#444', padding: 4, cursor: 'pointer', display: 'flex', marginLeft: 2 }}><IconTrash /></button>
                 </div>
               </div>
@@ -956,10 +992,13 @@ function CreditTab({ credits, onAdd, onUpdate }: { credits: Credit[]; onAdd: (c:
 
   const filteredActive = useMemo(() => {
     return activeCredits.filter(c => {
-      const s = search.toLowerCase()
+      const s = search.toLowerCase().trim()
+      if (!s) return true
       const nameMatch = c.clientName.toLowerCase().includes(s)
       const docMatch = c.clientDocument ? c.clientDocument.toLowerCase().includes(s) : false
-      return nameMatch || docMatch
+      const phoneMatch = c.clientPhone ? c.clientPhone.toLowerCase().includes(s) : false
+      const prodMatch = c.products ? c.products.toLowerCase().includes(s) : false
+      return nameMatch || docMatch || phoneMatch || prodMatch
     })
   }, [activeCredits, search])
 
@@ -1066,10 +1105,13 @@ function FinalizedCreditsModal({ credits, onSelectCredit, onClose }: { credits: 
 
   const filtered = useMemo(() => {
     return finalized.filter(c => {
-      const s = search.toLowerCase()
+      const s = search.toLowerCase().trim()
+      if (!s) return true
       const nameMatch = c.clientName.toLowerCase().includes(s)
       const docMatch = c.clientDocument ? c.clientDocument.toLowerCase().includes(s) : false
-      return nameMatch || docMatch
+      const phoneMatch = c.clientPhone ? c.clientPhone.toLowerCase().includes(s) : false
+      const prodMatch = c.products ? c.products.toLowerCase().includes(s) : false
+      return nameMatch || docMatch || phoneMatch || prodMatch
     })
   }, [finalized, search])
 
@@ -1358,8 +1400,12 @@ function CreditDetail({ credit, onBack, onUpdate }: { credit: Credit; onBack: ()
 
 function RegisterPaymentModal({ credit, onSave, onClose }: { credit: Credit; onSave: (c: Credit) => void; onClose: () => void }) {
   const pendingInsts = credit.installments.filter(i => instStatus(i) !== 'pagado')
-  const [selectedIdx, setSelectedIdx] = useState(credit.installments.findIndex(i => instStatus(i) !== 'pagado'))
-  const [amount, setAmount] = useState(selectedIdx >= 0 ? credit.installments[selectedIdx].quotaValue.toString() : '')
+  const initialIdx = credit.installments.findIndex(i => instStatus(i) !== 'pagado')
+  const [selectedIdx, setSelectedIdx] = useState(initialIdx)
+  const initialPendingAmount = initialIdx >= 0
+    ? Math.max(0, credit.installments[initialIdx].quotaValue - credit.installments[initialIdx].paidAmount)
+    : 0
+  const [amount, setAmount] = useState(initialIdx >= 0 ? initialPendingAmount.toString() : '')
   const [method, setMethod] = useState<'efectivo' | 'tarjeta' | 'transferencia'>('efectivo')
   const [notes, setNotes] = useState('')
   const pmColor = (m: string) => m === 'efectivo' ? '#00e676' : m === 'tarjeta' ? '#448aff' : '#ff9800'
@@ -1368,7 +1414,7 @@ function RegisterPaymentModal({ credit, onSave, onClose }: { credit: Credit; onS
     return (
       <div className="fade-in" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
         <div style={{ background: '#0e0e0e', border: '1px solid #222', borderRadius: 16, padding: 24, textAlign: 'center' }}>
-          <div style={{ fontSize: 32, marginBottom: 8 }}>✓</div>
+          <div style={{ fontSize: 32, marginBottom: 8, color: '#00e676' }}>✓</div>
           <div style={{ fontSize: 15, fontWeight: 600, color: '#00e676' }}>Crédito finalizado</div>
           <button onClick={onClose} style={{ marginTop: 16, background: '#1a1a1a', border: 'none', color: '#888', borderRadius: 8, padding: '8px 20px', cursor: 'pointer' }}>Cerrar</button>
         </div>
@@ -1377,13 +1423,17 @@ function RegisterPaymentModal({ credit, onSave, onClose }: { credit: Credit; onS
   }
 
   const handleSave = () => {
-    if (selectedIdx < 0 || !Number(amount)) return
+    if (selectedIdx < 0 || !Number(amount) || Number(amount) <= 0) return
     const updated = { ...credit, installments: credit.installments.map((inst, i) => {
       if (i !== selectedIdx) return inst
       return { ...inst, paidAmount: inst.paidAmount + Number(amount), paidDate: new Date(), paymentMethod: method, notes }
     })}
     onSave(updated)
   }
+
+  const curInst = selectedIdx >= 0 ? credit.installments[selectedIdx] : null
+  const curPending = curInst ? Math.max(0, curInst.quotaValue - curInst.paidAmount) : 0
+  const totalPending = pendingBalance(credit)
 
   return (
     <div className="fade-in" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 60, display: 'flex', alignItems: 'flex-end' }}>
@@ -1398,19 +1448,20 @@ function RegisterPaymentModal({ credit, onSave, onClose }: { credit: Credit; onS
 
         {/* Select installment */}
         <div style={{ marginBottom: 16 }}>
-          <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: '#555', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10 }}>Cuota a pagar</div>
+          <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: '#555', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10 }}>Cuota a abonar</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {credit.installments.map((inst, i) => {
               const s = instStatus(inst)
               if (s === 'pagado') return null
+              const quotaRemaining = Math.max(0, inst.quotaValue - inst.paidAmount)
               return (
-                <button key={i} onClick={() => { setSelectedIdx(i); setAmount(inst.quotaValue.toString()) }} style={{ background: selectedIdx === i ? 'rgba(68,138,255,0.12)' : '#141414', border: `1px solid ${selectedIdx === i ? '#448aff' : '#222'}`, borderRadius: 10, padding: '12px 14px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#f0f0f0', textAlign: 'left' }}>
+                <button key={i} onClick={() => { setSelectedIdx(i); setAmount(quotaRemaining.toString()) }} style={{ background: selectedIdx === i ? 'rgba(68,138,255,0.12)' : '#141414', border: `1px solid ${selectedIdx === i ? '#448aff' : '#222'}`, borderRadius: 10, padding: '12px 14px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#f0f0f0', textAlign: 'left' }}>
                   <div>
                     <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, fontWeight: 600 }}>Cuota {inst.quotaNumber}</div>
                     <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: s === 'vencido' ? '#ff3d3d' : '#555', marginTop: 2 }}>{fmtDate(inst.dueDate)}</div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, fontWeight: 600, color: s === 'vencido' ? '#ff3d3d' : '#f0f0f0' }}>{fmt(inst.quotaValue)}</div>
+                    <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, fontWeight: 600, color: s === 'vencido' ? '#ff3d3d' : '#f0f0f0' }}>{fmt(quotaRemaining)} pend.</div>
                     <InstStatusBadge status={s} />
                   </div>
                 </button>
@@ -1420,9 +1471,24 @@ function RegisterPaymentModal({ credit, onSave, onClose }: { credit: Credit; onS
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <Field label="Valor del abono">
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: '#555', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Valor del abono</span>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {curPending > 0 && (
+                  <button type="button" onClick={() => setAmount(curPending.toString())} style={{ background: '#1c1c1c', border: '1px solid #333', color: '#448aff', fontSize: 10, fontFamily: 'JetBrains Mono, monospace', borderRadius: 4, padding: '2px 6px', cursor: 'pointer' }}>
+                    Cuota ({fmt(curPending)})
+                  </button>
+                )}
+                {totalPending > 0 && (
+                  <button type="button" onClick={() => setAmount(totalPending.toString())} style={{ background: '#1c1c1c', border: '1px solid #333', color: '#00e676', fontSize: 10, fontFamily: 'JetBrains Mono, monospace', borderRadius: 4, padding: '2px 6px', cursor: 'pointer' }}>
+                    Total ({fmt(totalPending)})
+                  </button>
+                )}
+              </div>
+            </div>
             <input value={amount} onChange={e => setAmount(e.target.value)} type="number" style={{ ...inputStyle, fontFamily: 'JetBrains Mono, monospace', fontSize: 16 }} />
-          </Field>
+          </div>
           <div>
             <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: '#555', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10 }}>Método de pago</div>
             <div style={{ display: 'flex', gap: 8 }}>
@@ -1432,7 +1498,7 @@ function RegisterPaymentModal({ credit, onSave, onClose }: { credit: Credit; onS
             </div>
           </div>
           <Field label="Observaciones">
-            <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Referencia, observación…" style={{ ...inputStyle, background: '#141414' }} />
+            <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Referencia, número de comprobante…" style={{ ...inputStyle, background: '#141414' }} />
           </Field>
         </div>
 
@@ -1446,7 +1512,7 @@ function RegisterPaymentModal({ credit, onSave, onClose }: { credit: Credit; onS
           </div>
         )}
 
-        <button onClick={handleSave} disabled={selectedIdx < 0 || !Number(amount)} style={{ width: '100%', background: selectedIdx >= 0 && Number(amount) > 0 ? '#448aff' : '#1a1a1a', color: selectedIdx >= 0 && Number(amount) > 0 ? '#fff' : '#444', border: 'none', borderRadius: 12, padding: 15, fontSize: 15, fontWeight: 700, cursor: selectedIdx >= 0 && Number(amount) > 0 ? 'pointer' : 'not-allowed', marginTop: 14 }}>
+        <button onClick={handleSave} disabled={selectedIdx < 0 || !Number(amount) || Number(amount) <= 0} style={{ width: '100%', background: selectedIdx >= 0 && Number(amount) > 0 ? '#448aff' : '#1a1a1a', color: selectedIdx >= 0 && Number(amount) > 0 ? '#fff' : '#444', border: 'none', borderRadius: 12, padding: 15, fontSize: 15, fontWeight: 700, cursor: selectedIdx >= 0 && Number(amount) > 0 ? 'pointer' : 'not-allowed', marginTop: 14 }}>
           Confirmar pago · {fmt(Number(amount) || 0)}
         </button>
       </div>
