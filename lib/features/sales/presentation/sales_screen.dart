@@ -16,6 +16,8 @@ import '../../../shared/widgets/image_viewer_modal.dart';
 import '../../../core/utils/currency_formatter.dart';
 import '../../auth/providers/auth_provider.dart';
 
+import '../../../shared/widgets/sync_status_badge.dart';
+
 class SalesScreen extends ConsumerWidget {
   const SalesScreen({super.key});
 
@@ -46,6 +48,7 @@ class SalesScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Ventas'),
         actions: [
+          const SyncStatusBadge(compact: true),
           if (authState.isAdmin)
             IconButton(
               icon: const Icon(

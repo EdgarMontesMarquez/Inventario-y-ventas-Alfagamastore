@@ -4,6 +4,8 @@ import '../../core/design_system/tokens/color_tokens.dart';
 import '../../core/design_system/tokens/font_tokens.dart';
 import '../../core/design_system/tokens/border_shadow_tokens.dart';
 
+import 'sync_status_badge.dart';
+
 class NavigationShell extends StatelessWidget {
   final int currentIndex;
   final Widget body;
@@ -37,7 +39,12 @@ class NavigationShell extends StatelessWidget {
         systemNavigationBarDividerColor: Colors.transparent,
       ),
       child: Scaffold(
-        body: body,
+        body: Column(
+          children: [
+            const OfflineGlobalBanner(),
+            Expanded(child: body),
+          ],
+        ),
         bottomNavigationBar: Container(
           decoration: const BoxDecoration(
             color: navBg,

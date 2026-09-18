@@ -20,6 +20,8 @@ import '../../auth/providers/auth_provider.dart';
 
 import 'finalized_credits_screen.dart';
 
+import '../../../shared/widgets/sync_status_badge.dart';
+
 class CreditsScreen extends ConsumerStatefulWidget {
   const CreditsScreen({super.key});
 
@@ -73,6 +75,7 @@ class _CreditsScreenState extends ConsumerState<CreditsScreen> {
       appBar: AppBar(
         title: const Text('Créditos & Cobranza'),
         actions: [
+          const SyncStatusBadge(compact: true),
           IconButton(
             icon: const Icon(Icons.notifications_active_outlined, size: 22, color: ColorTokens.lightBrandPrimary),
             onPressed: () {

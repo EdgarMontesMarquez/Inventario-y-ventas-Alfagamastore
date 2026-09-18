@@ -19,6 +19,8 @@ import '../../../core/utils/currency_formatter.dart';
 import '../providers/category_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 
+import '../../../shared/widgets/sync_status_badge.dart';
+
 class InventoryScreen extends ConsumerStatefulWidget {
   const InventoryScreen({super.key});
 
@@ -68,6 +70,10 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Inventario'),
+        actions: const [
+          SyncStatusBadge(compact: true),
+          SizedBox(width: 8),
+        ],
       ),
       body: productsAsync.when(
         loading: () => const LoadingSpinner(message: 'Cargando inventario...'),

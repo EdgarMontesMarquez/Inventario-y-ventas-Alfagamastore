@@ -1,37 +1,36 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../repositories/base_repositories.dart';
-import '../repositories/supabase_product_repository.dart';
-import '../repositories/supabase_sale_repository.dart';
-import '../repositories/supabase_credit_repository.dart';
-import '../repositories/supabase_customer_repository.dart';
 import '../models/product.dart';
 import '../models/sale.dart';
 import '../models/credit.dart';
 import '../models/customer.dart';
-
-import '../repositories/supabase_cash_shift_repository.dart';
 import '../models/cash_shift.dart';
+import '../repositories/offline_first_product_repository.dart';
+import '../repositories/offline_first_sale_repository.dart';
+import '../repositories/offline_first_credit_repository.dart';
+import '../repositories/offline_first_customer_repository.dart';
+import '../repositories/offline_first_cash_shift_repository.dart';
 
-// Repositorios de datos en vivo conectados a Supabase PostgreSQL
+// Repositorios con soporte Offline-First y sincronización automática en Supabase
 final productRepositoryProvider = Provider<ProductRepository>((ref) {
-  return SupabaseProductRepository(Supabase.instance.client);
+  return OfflineFirstProductRepository(Supabase.instance.client);
 });
 
 final saleRepositoryProvider = Provider<SaleRepository>((ref) {
-  return SupabaseSaleRepository(Supabase.instance.client);
+  return OfflineFirstSaleRepository(Supabase.instance.client);
 });
 
 final creditRepositoryProvider = Provider<CreditRepository>((ref) {
-  return SupabaseCreditRepository(Supabase.instance.client);
+  return OfflineFirstCreditRepository(Supabase.instance.client);
 });
 
 final customerRepositoryProvider = Provider<CustomerRepository>((ref) {
-  return SupabaseCustomerRepository(Supabase.instance.client);
+  return OfflineFirstCustomerRepository(Supabase.instance.client);
 });
 
-final cashShiftRepositoryProvider = Provider<SupabaseCashShiftRepository>((ref) {
-  return SupabaseCashShiftRepository(Supabase.instance.client);
+final cashShiftRepositoryProvider = Provider<OfflineFirstCashShiftRepository>((ref) {
+  return OfflineFirstCashShiftRepository(Supabase.instance.client);
 });
 
 // Providers de consulta reactiva de datos optimizados con keepAlive para rendimiento instantáneo (0ms latency)

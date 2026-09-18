@@ -12,6 +12,8 @@ import '../../../shared/providers/repository_providers.dart';
 import '../../../core/utils/currency_formatter.dart';
 import '../../auth/providers/auth_provider.dart';
 
+import '../../../shared/widgets/sync_status_badge.dart';
+
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
@@ -58,6 +60,7 @@ class DashboardScreen extends ConsumerWidget {
           ],
         ),
         actions: [
+          const SyncStatusBadge(compact: true),
           IconButton(
             icon: const Icon(Icons.settings_outlined, size: 20, color: ColorTokens.lightTextSecondary),
             onPressed: () {
