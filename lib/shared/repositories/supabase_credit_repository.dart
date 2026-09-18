@@ -301,6 +301,15 @@ class SupabaseCreditRepository implements CreditRepository {
   }
 
   @override
+  Future<void> deleteCredit(String creditId) async {
+    try {
+      await client.from('credit_charges').delete().eq('credit_id', creditId);
+    } catch (_) {}
+    await client.from('credit_installments').delete().eq('credit_id', creditId);
+    await client.from('credits').delete().eq('id', creditId);
+  }
+
+  @override
   Future<void> addExtraCharge(String creditId, CreditCharge charge, Credit updatedCredit) async {
     // 1. Guardar registro en la tabla credit_charges (si la tabla existe)
     try {

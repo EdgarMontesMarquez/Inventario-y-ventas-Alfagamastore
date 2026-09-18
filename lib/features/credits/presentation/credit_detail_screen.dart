@@ -18,6 +18,9 @@ import '../../../shared/widgets/app_logo.dart';
 import '../../../shared/widgets/image_viewer_modal.dart';
 import '../../../shared/providers/repository_providers.dart';
 import '../../../shared/models/credit.dart';
+import '../../../shared/models/customer.dart';
+import '../../../shared/models/product.dart';
+import '../../../shared/widgets/barcode_scanner_modal.dart';
 import '../../../core/utils/currency_formatter.dart';
 import '../../auth/providers/auth_provider.dart';
 import 'package:pdf/pdf.dart';
@@ -68,6 +71,45 @@ class CreditDetailScreen extends ConsumerWidget {
               SnackBar(
                 content: Text('Cargo de ${CurrencyUtils.format(charge.amount)} aplicado exitosamente.'),
                 backgroundColor: ColorTokens.lightBrandPrimary,
+              ),
+            );
+          }
+        },
+      ),
+    );
+  }
+
+  void _openEditCreditSheet(BuildContext context, WidgetRef ref, Credit credit) {
+    CustomOverlays.showBottomSheet(
+      context: context,
+      title: 'Editar crédito completo',
+      child: _EditCreditSheet(
+        credit: credit,
+        onSave: (updatedCredit) async {
+          final repo = ref.read(creditRepositoryProvider);
+          await repo.updateCredit(updatedCredit);
+          ref.invalidate(creditsFutureProvider);
+          if (context.mounted) {
+            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Crédito actualizado exitosamente'),
+                backgroundColor: ColorTokens.lightBrandPrimary,
+              ),
+            );
+          }
+        },
+        onDelete: (id) async {
+          final repo = ref.read(creditRepositoryProvider);
+          await repo.deleteCredit(id);
+          ref.invalidate(creditsFutureProvider);
+          if (context.mounted) {
+            Navigator.pop(context); // Cierra bottom sheet
+            Navigator.pop(context); // Vuelve a la lista de créditos
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Crédito eliminado exitosamente'),
+                backgroundColor: ColorTokens.error,
               ),
             );
           }
@@ -550,6 +592,18 @@ class CreditDetailScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Detalle de Crédito'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.edit_outlined, color: ColorTokens.lightBrandPrimary),
+            tooltip: 'Editar crédito completo',
+            onPressed: () {
+              final credit = creditsAsync.value?.where((c) => c.id == creditId).firstOrNull;
+              if (credit != null) {
+                _openEditCreditSheet(context, ref, credit);
+              }
+            },
+          ),
+        ],
       ),
       body: creditsAsync.when(
         loading: () => const LoadingSpinner(message: 'Cargando detalle de crédito...'),
@@ -743,44 +797,68 @@ class CreditDetailScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 12),
 
-                // Resumen de la Cuenta
+                // Resumen de la Cuenta & Estado
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('RESUMEN DE CUENTA', style: FontTokens.label.copyWith(color: ColorTokens.lightBrandPrimary, fontWeight: FontWeight.bold, letterSpacing: 0.8)),
+                    StatusBadge(status: st),
+                  ],
+                ),
+                const SizedBox(height: 8),
+
+                // Tarjeta 3 Columnas: Total / Abonado / Saldo
                 Container(
-                  padding: const EdgeInsets.all(14),
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: ColorTokens.surface,
-                    border: Border.all(color: ColorTokens.border),
-                    borderRadius: BorderRadius.circular(12),
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: ColorTokens.lightBorderSubtle),
+                    boxShadow: BorderShadowTokens.shadowClayCard,
                   ),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('RESUMEN DE LA CUENTA', style: FontTokens.label.copyWith(color: ColorTokens.secondary)),
-                      const SizedBox(height: 12),
                       Row(
                         children: [
                           Expanded(
-                            child: _buildMetricTile('TOTAL VENTA', CurrencyUtils.format(credit.totalSale), ColorTokens.text),
+                            child: _buildMetricTile(
+                              'TOTAL VENTA',
+                              CurrencyUtils.format(credit.totalSale),
+                              ColorTokens.lightTextPrimary,
+                            ),
                           ),
                           const SizedBox(width: 8),
                           Expanded(
-                            child: _buildMetricTile('ABONADO', CurrencyUtils.format(paid), ColorTokens.primary),
+                            child: _buildMetricTile(
+                              'ABONADO',
+                              CurrencyUtils.format(paid),
+                              ColorTokens.lightBrandPrimary,
+                            ),
                           ),
                           const SizedBox(width: 8),
                           Expanded(
-                            child: _buildMetricTile('SALDO', CurrencyUtils.format(pending), ColorTokens.error),
+                            child: _buildMetricTile(
+                              'SALDO',
+                              CurrencyUtils.format(pending),
+                              pending > 0 ? ColorTokens.error : ColorTokens.lightBrandPrimary,
+                            ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 14),
+                      // Barra de Progreso
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text('Avance del pago', style: FontTokens.bodySmall),
-                          Text('${pct.toStringAsFixed(1)}%', style: FontTokens.moneySmall.copyWith(color: st == 'mora' ? ColorTokens.warning : ColorTokens.primary)),
+                          Text('Avance del pago', style: FontTokens.bodySmall.copyWith(color: ColorTokens.lightTextSecondary)),
+                          Text('${pct.toStringAsFixed(1)}%', style: FontTokens.bodySmall.copyWith(fontWeight: FontWeight.bold, color: ColorTokens.lightBrandPrimary)),
                         ],
                       ),
                       const SizedBox(height: 6),
-                      ProgressBar(percentage: pct, color: st == 'mora' ? ColorTokens.warning : ColorTokens.primary),
+                      ProgressBar(
+                        percentage: pct,
+                        color: st == 'mora' ? ColorTokens.warning : ColorTokens.lightBrandPrimary,
+                      ),
                     ],
                   ),
                 ),
@@ -1905,6 +1983,631 @@ class _AddExtraChargeSheetState extends State<_AddExtraChargeSheet> {
                 ),
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EditCreditSheet extends ConsumerStatefulWidget {
+  final Credit credit;
+  final ValueChanged<Credit> onSave;
+  final ValueChanged<String> onDelete;
+
+  const _EditCreditSheet({
+    required this.credit,
+    required this.onSave,
+    required this.onDelete,
+  });
+
+  @override
+  ConsumerState<_EditCreditSheet> createState() => _EditCreditSheetState();
+}
+
+class _EditCreditSheetState extends ConsumerState<_EditCreditSheet> {
+  final _formKey = GlobalKey<FormState>();
+
+  late TextEditingController _nameCtrl;
+  late TextEditingController _phoneCtrl;
+  late TextEditingController _addressCtrl;
+  late TextEditingController _docIdCtrl;
+  late TextEditingController _productsCtrl;
+  late TextEditingController _totalSaleCtrl;
+  late TextEditingController _totalQuotasCtrl;
+  late TextEditingController _customInterestCtrl;
+  late TextEditingController _customQuotaCtrl;
+  late TextEditingController _extraNotesCtrl;
+
+  String _docType = 'CC';
+  String _frequency = 'mensual';
+  DateTime _startDate = DateTime.now();
+
+  bool _isSubmitting = false;
+
+  String _customerQuery = '';
+  String _productQuery = '';
+  bool _showCustomerResults = false;
+  bool _showProductResults = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _startDate = widget.credit.startDate;
+    _frequency = widget.credit.paymentFrequency;
+
+    _nameCtrl = TextEditingController(text: widget.credit.clientName);
+    _phoneCtrl = TextEditingController(text: widget.credit.clientPhone);
+    _addressCtrl = TextEditingController(text: widget.credit.clientAddress);
+    _productsCtrl = TextEditingController(text: widget.credit.products);
+    _totalQuotasCtrl = TextEditingController(text: widget.credit.totalQuotas.toString());
+    _customQuotaCtrl = TextEditingController(text: widget.credit.quotaValue.toInt().toString());
+
+    // Parse Documento, Interés y notas adicionales desde generalNotes
+    _parseNotes(widget.credit.generalNotes);
+
+    _docIdCtrl = TextEditingController(text: _parsedDocId);
+    _customInterestCtrl = TextEditingController(text: _parsedInterestRate > 0 ? _parsedInterestRate.toStringAsFixed(1) : '');
+    _extraNotesCtrl = TextEditingController(text: _parsedExtraNotes);
+
+    // Calcular venta base sin interés
+    double baseSale = widget.credit.totalSale;
+    if (_parsedInterestRate > 0) {
+      baseSale = widget.credit.totalSale / (1 + (_parsedInterestRate / 100));
+    }
+    _totalSaleCtrl = TextEditingController(text: baseSale.toInt().toString());
+  }
+
+  String _parsedDocId = '';
+  double _parsedInterestRate = 0.0;
+  String _parsedExtraNotes = '';
+
+  void _parseNotes(String notes) {
+    if (notes.isEmpty) return;
+
+    if (notes.contains('Documento:')) {
+      final afterDoc = notes.split('Documento:')[1].split('|')[0].trim();
+      final tokens = afterDoc.split(' ');
+      if (tokens.isNotEmpty) {
+        if (['CC', 'NIT', 'CE', 'Pasaporte', 'PAS'].contains(tokens[0])) {
+          _docType = tokens[0] == 'PAS' ? 'Pasaporte' : tokens[0];
+          if (tokens.length > 1) {
+            _parsedDocId = tokens.sublist(1).join(' ').trim();
+          }
+        } else {
+          _parsedDocId = afterDoc;
+        }
+      }
+    }
+
+    if (notes.contains('Interés:')) {
+      final afterInt = notes.split('Interés:')[1].split('|')[0].replaceAll('%', '').trim();
+      _parsedInterestRate = double.tryParse(afterInt) ?? 0.0;
+    }
+
+    final parts = notes.split('|').map((p) => p.trim()).where((p) => !p.startsWith('Documento:') && !p.startsWith('Interés:')).toList();
+    if (parts.isNotEmpty) {
+      _parsedExtraNotes = parts.join(' | ');
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _phoneCtrl.dispose();
+    _addressCtrl.dispose();
+    _docIdCtrl.dispose();
+    _productsCtrl.dispose();
+    _totalSaleCtrl.dispose();
+    _totalQuotasCtrl.dispose();
+    _customInterestCtrl.dispose();
+    _customQuotaCtrl.dispose();
+    _extraNotesCtrl.dispose();
+    super.dispose();
+  }
+
+  double get _baseSale => double.tryParse(_totalSaleCtrl.text) ?? 0;
+  double get _interestRate => double.tryParse(_customInterestCtrl.text) ?? 0;
+  double get _interestAmount => _baseSale * (_interestRate / 100);
+  double get _totalWithInterest => _baseSale + _interestAmount;
+
+  double get _quotaValue {
+    final manualQuota = double.tryParse(_customQuotaCtrl.text);
+    if (manualQuota != null && manualQuota > 0) return manualQuota;
+
+    final quotas = int.tryParse(_totalQuotasCtrl.text) ?? 0;
+    if (_totalWithInterest > 0 && quotas > 0) {
+      return (_totalWithInterest / quotas).ceilToDouble();
+    }
+    return 0;
+  }
+
+  void _handleSave() {
+    if (_isSubmitting || !_formKey.currentState!.validate()) return;
+
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    final totalQuotas = int.tryParse(_totalQuotasCtrl.text) ?? widget.credit.totalQuotas;
+    final productText = _productsCtrl.text.trim();
+    final customerText = _nameCtrl.text.trim();
+
+    // Reconstruir generalNotes con Documento, Interés y notas adicionales
+    final docString = _docIdCtrl.text.trim().isNotEmpty ? 'Documento: $_docType ${_docIdCtrl.text.trim()}' : '';
+    final intString = _interestRate > 0 ? 'Interés: ${_interestRate.toStringAsFixed(1)}%' : '';
+    final extraString = _extraNotesCtrl.text.trim();
+    final notesList = [docString, intString, extraString].where((s) => s.isNotEmpty).toList();
+    final formattedGeneralNotes = notesList.join(' | ');
+
+    // Recalcular cuotas si cambió el total, la frecuencia o la cantidad de cuotas
+    List<CreditInstallment> newInstallments;
+    if (totalQuotas != widget.credit.totalQuotas || _frequency != widget.credit.paymentFrequency || _totalWithInterest != widget.credit.totalSale) {
+      newInstallments = Credit.generateInstallments(
+        _startDate,
+        _frequency,
+        totalQuotas,
+        _quotaValue,
+      );
+      // Preservar abonos de cuotas que ya fueron pagadas
+      for (int i = 0; i < newInstallments.length && i < widget.credit.installments.length; i++) {
+        final old = widget.credit.installments[i];
+        if (old.paidAmount > 0) {
+          newInstallments[i] = newInstallments[i].copyWith(
+            paidAmount: old.paidAmount,
+            paidDate: old.paidDate,
+            paymentMethod: old.paymentMethod,
+            notes: old.notes,
+            receiptImageUrl: old.receiptImageUrl,
+          );
+        }
+      }
+    } else {
+      newInstallments = widget.credit.installments.map((i) {
+        return i.copyWith(quotaValue: _quotaValue);
+      }).toList();
+    }
+
+    final updated = widget.credit.copyWith(
+      clientName: customerText,
+      clientPhone: _phoneCtrl.text.trim(),
+      clientAddress: _addressCtrl.text.trim(),
+      products: productText,
+      totalSale: _totalWithInterest,
+      paymentFrequency: _frequency,
+      totalQuotas: totalQuotas,
+      quotaValue: _quotaValue,
+      installments: newInstallments,
+      generalNotes: formattedGeneralNotes,
+    );
+
+    widget.onSave(updated);
+  }
+
+  void _handleDelete() {
+    final bool isFullyPaid = widget.credit.status == 'finalizado' || widget.credit.pendingBalance <= 0 || widget.credit.totalPaid >= widget.credit.totalSale;
+
+    if (!isFullyPaid) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: const [
+              Icon(Icons.lock_outline, color: ColorTokens.warning),
+              SizedBox(width: 8),
+              Text('No se puede eliminar'),
+            ],
+          ),
+          content: Text(
+            'El crédito tiene un saldo pendiente de ${CurrencyUtils.format(widget.credit.pendingBalance)}.\n\nPor seguridad contable, solo se pueden eliminar créditos que estén 100% pagados y finalizados.',
+            style: FontTokens.bodyMedium,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Entendido'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: const [
+            Icon(Icons.warning_amber_rounded, color: ColorTokens.error),
+            SizedBox(width: 8),
+            Text('¿Eliminar crédito finalizado?'),
+          ],
+        ),
+        content: Text(
+          'Esta acción no se puede deshacer. Se eliminará el crédito de ${widget.credit.clientName} junto con todas sus cuotas y cargos históricos.',
+          style: FontTokens.bodyMedium,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: ColorTokens.error,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              widget.onDelete(widget.credit.id);
+            },
+            child: const Text('Sí, eliminar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final currencyFmt = NumberFormat.currency(locale: 'es_CO', symbol: '\$', decimalDigits: 0);
+    final customersAsync = ref.watch(customersFutureProvider);
+    final productsAsync = ref.watch(productsFutureProvider);
+
+    final registeredCustomers = customersAsync.asData?.value ?? [];
+    final productsList = productsAsync.asData?.value ?? [];
+
+    final matchingCustomers = _customerQuery.trim().isEmpty
+        ? <Customer>[]
+        : registeredCustomers.where((c) =>
+            c.name.toLowerCase().contains(_customerQuery.toLowerCase()) ||
+            (c.documentId.isNotEmpty && c.documentId.contains(_customerQuery))).toList();
+
+    final matchingProducts = _productQuery.trim().isEmpty
+        ? <Product>[]
+        : productsList.where((p) =>
+            p.name.toLowerCase().contains(_productQuery.toLowerCase()) ||
+            p.sku.toLowerCase().contains(_productQuery.toLowerCase())).toList();
+
+    final bool isFullyPaid = widget.credit.status == 'finalizado' || widget.credit.pendingBalance <= 0 || widget.credit.totalPaid >= widget.credit.totalSale;
+
+    return Form(
+      key: _formKey,
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Buscador de Clientes
+            CustomTextField(
+              label: 'Nombre del Cliente (Escribe para buscar)',
+              hint: 'Escribe nombre o documento CC…',
+              controller: _nameCtrl,
+              onChanged: (val) {
+                setState(() {
+                  _customerQuery = val;
+                  _showCustomerResults = true;
+                });
+              },
+              validator: (v) => v == null || v.trim().isEmpty ? 'Requerido' : null,
+            ),
+
+            if (_showCustomerResults && matchingCustomers.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Container(
+                constraints: const BoxConstraints(maxHeight: 180),
+                decoration: BoxDecoration(
+                  color: ColorTokens.surfaceElevated,
+                  border: Border.all(color: ColorTokens.primary),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: matchingCustomers.length,
+                  separatorBuilder: (ctx, index) => const Divider(height: 1),
+                  itemBuilder: (ctx, idx) {
+                    final c = matchingCustomers[idx];
+                    final docInfo = c.documentId.isNotEmpty ? '${c.documentType}: ${c.documentId}' : 'Sin doc';
+                    final phoneInfo = c.phone.isNotEmpty ? 'Tel: ${c.phone}' : 'Sin tel';
+                    return ListTile(
+                      dense: true,
+                      title: Text(c.name, style: FontTokens.bodyMedium.copyWith(fontWeight: FontWeight.bold)),
+                      subtitle: Text('$docInfo · $phoneInfo', style: FontTokens.bodySmall),
+                      trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: ColorTokens.primary),
+                      onTap: () {
+                        setState(() {
+                          _nameCtrl.text = c.name;
+                          _phoneCtrl.text = c.phone;
+                          _addressCtrl.text = c.address;
+                          _docIdCtrl.text = c.documentId;
+                          _docType = c.documentType.isNotEmpty ? c.documentType : 'CC';
+                          _customerQuery = '';
+                          _showCustomerResults = false;
+                        });
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+
+            // Tipo y Número de Documento Identificación
+            Row(
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'TIPO (OPCIONAL)',
+                        style: FontTokens.bodySmall.copyWith(
+                          color: ColorTokens.lightTextSecondary,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      DropdownButtonFormField<String>(
+                        initialValue: _docType,
+                        isExpanded: true,
+                        decoration: const InputDecoration(),
+                        items: const [
+                          DropdownMenuItem(value: 'CC', child: Text('CC')),
+                          DropdownMenuItem(value: 'NIT', child: Text('NIT')),
+                          DropdownMenuItem(value: 'CE', child: Text('CE')),
+                          DropdownMenuItem(value: 'Pasaporte', child: Text('PAS')),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) setState(() => _docType = val);
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 3,
+                  child: CustomTextField(
+                    label: 'N° Documento (opcional)',
+                    hint: '1098765432',
+                    controller: _docIdCtrl,
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            Row(
+              children: [
+                Expanded(
+                  child: CustomPhoneInput(
+                    label: 'Teléfono (opcional)',
+                    hint: '300 123 4567',
+                    controller: _phoneCtrl,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: CustomTextField(
+                    label: 'Dirección (opcional)',
+                    hint: 'Cra 5 #12-34',
+                    controller: _addressCtrl,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Buscador de Productos
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: CustomTextField(
+                    label: 'Producto(s) (Escribe o Escanea)',
+                    hint: 'Escribe nombre o SKU del producto…',
+                    controller: _productsCtrl,
+                    onChanged: (val) {
+                      setState(() {
+                        _productQuery = val;
+                        _showProductResults = true;
+                      });
+                    },
+                    validator: (v) => v == null || v.trim().isEmpty ? 'Requerido' : null,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Padding(
+                  padding: const EdgeInsets.only(top: 24),
+                  child: IconButton(
+                    icon: const Icon(Icons.camera_alt_outlined, color: ColorTokens.primary, size: 24),
+                    tooltip: 'Escanear producto con cámara',
+                    onPressed: () async {
+                      final sku = await BarcodeScannerModal.scan(context);
+                      if (sku != null && mounted) {
+                        final found = productsList.where((p) => p.sku.toLowerCase() == sku.toLowerCase()).firstOrNull;
+                        if (found != null) {
+                          _productsCtrl.text = found.name;
+                          _totalSaleCtrl.text = found.price.toStringAsFixed(0);
+                        } else {
+                          _productsCtrl.text = 'SKU: $sku';
+                        }
+                        setState(() {
+                          _showProductResults = false;
+                        });
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+
+            if (_showProductResults && matchingProducts.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Container(
+                constraints: const BoxConstraints(maxHeight: 180),
+                decoration: BoxDecoration(
+                  color: ColorTokens.surfaceElevated,
+                  border: Border.all(color: ColorTokens.primary),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: matchingProducts.length,
+                  separatorBuilder: (ctx, index) => const Divider(height: 1),
+                  itemBuilder: (ctx, idx) {
+                    final p = matchingProducts[idx];
+                    return ListTile(
+                      dense: true,
+                      title: Text(p.name, style: FontTokens.bodyMedium.copyWith(fontWeight: FontWeight.bold)),
+                      subtitle: Text('SKU: ${p.sku} · Stock: ${p.stock} uds', style: FontTokens.bodySmall),
+                      trailing: Text(currencyFmt.format(p.price), style: FontTokens.moneySmall.copyWith(color: ColorTokens.primary, fontWeight: FontWeight.bold)),
+                      onTap: () {
+                        setState(() {
+                          _productsCtrl.text = p.name;
+                          _totalSaleCtrl.text = p.price.toStringAsFixed(0);
+                          _productQuery = '';
+                          _showProductResults = false;
+                        });
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+
+            Row(
+              children: [
+                Expanded(
+                  child: CustomMoneyInput(
+                    label: 'Total Venta',
+                    hint: '3200000',
+                    controller: _totalSaleCtrl,
+                    onChanged: (_) => setState(() {}),
+                    validator: (v) => v == null || v.trim().isEmpty ? 'Requerido' : null,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: CustomTextField(
+                    label: 'N° Cuotas',
+                    hint: '12',
+                    controller: _totalQuotasCtrl,
+                    keyboardType: TextInputType.number,
+                    onChanged: (_) => setState(() {}),
+                    validator: (v) => v == null || v.trim().isEmpty ? 'Requerido' : null,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'FRECUENCIA DE PAGO',
+                        style: FontTokens.bodySmall.copyWith(
+                          color: ColorTokens.lightTextSecondary,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      DropdownButtonFormField<String>(
+                        initialValue: _frequency,
+                        isExpanded: true,
+                        decoration: const InputDecoration(),
+                        items: const [
+                          DropdownMenuItem(value: 'semanal', child: Text('Semanal')),
+                          DropdownMenuItem(value: 'quincenal', child: Text('Quincenal')),
+                          DropdownMenuItem(value: 'mensual', child: Text('Mensual')),
+                          DropdownMenuItem(value: 'diario', child: Text('Diario')),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) setState(() => _frequency = val);
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: CustomTextField(
+                    label: 'Tasa Interés (%)',
+                    hint: '5',
+                    controller: _customInterestCtrl,
+                    keyboardType: TextInputType.number,
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            CustomMoneyInput(
+              label: 'Valor por Cuota (Personalizable)',
+              hint: 'Ingresa o edita el valor de la cuota',
+              controller: _customQuotaCtrl,
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 12),
+
+            CustomTextField(
+              label: 'Notas Adicionales (Opcional)',
+              hint: 'Observaciones...',
+              controller: _extraNotesCtrl,
+            ),
+            const SizedBox(height: 16),
+
+            if (_quotaValue > 0) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: ColorTokens.primary.withAlpha(20),
+                  border: Border.all(color: ColorTokens.primary.withAlpha(60)),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('VALOR POR CUOTA:', style: FontTokens.label.copyWith(fontSize: 11)),
+                    Text(
+                      currencyFmt.format(_quotaValue),
+                      style: FontTokens.h3.copyWith(color: ColorTokens.primary, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+
+            CustomButton(
+              text: 'Guardar Cambios',
+              icon: Icons.save_outlined,
+              isLoading: _isSubmitting,
+              onPressed: _handleSave,
+            ),
+            const SizedBox(height: 10),
+
+            CustomButton(
+              text: isFullyPaid ? 'Eliminar Crédito' : 'Eliminar Crédito (Solo al 100% pagado)',
+              icon: isFullyPaid ? Icons.delete_outline : Icons.lock_outline,
+              isSecondary: true,
+              onPressed: _handleDelete,
+            ),
+            const SizedBox(height: 20),
           ],
         ),
       ),

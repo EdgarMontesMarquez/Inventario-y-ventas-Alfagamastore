@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import logoImg from '@/imports/logo_compact.png'
 import { jsPDF } from 'jspdf'
@@ -40,6 +40,25 @@ const fmtShortDate = (dt: Date) =>
   dt.toLocaleDateString('es-CO', { day: '2-digit', month: 'short' })
 const fmtTime = (dt: Date) =>
   dt.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
+
+const toDateInputValue = (dt: any): string => {
+  if (!dt) return ''
+  const dateObj = ensureDate(dt)
+  const y = dateObj.getFullYear()
+  const m = String(dateObj.getMonth() + 1).padStart(2, '0')
+  const day = String(dateObj.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+const fromDateInputValue = (str: string): Date => {
+  if (!str) return new Date()
+  const parts = str.split('-').map(Number)
+  if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+    return new Date(parts[0], parts[1] - 1, parts[2])
+  }
+  return new Date(str)
+}
+
 const fmtRelDate = (dt: Date) => {
   const now = new Date(); const y2 = new Date(now); y2.setDate(now.getDate() - 1)
   if (dt.toDateString() === now.toDateString()) return 'Hoy'
@@ -418,6 +437,19 @@ const IconAlert = () => (
     <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
   </svg>
 )
+const IconEdit = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+  </svg>
+)
+const IconRefresh = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M23 4v6h-6" />
+    <path d="M1 20v-6h6" />
+    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+  </svg>
+)
 
 // ─── Shared components ────────────────────────────────────────────────────────
 
@@ -486,87 +518,95 @@ function InstStatusBadge({ status }: { status: 'pagado' | 'parcial' | 'vencido' 
 function LoginScreen({ onLogin }: { onLogin: () => void }) {
   const [user, setUser] = useState('')
   const [pass, setPass] = useState('')
-  const [error, setError] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [showPass, setShowPass] = useState(false)
 
-  const handleLogin = () => {
+  const handlePasswordLogin = () => {
     if (user.toLowerCase() === 'admin' && pass === '1234') {
       onLogin()
     } else {
-      setError(true)
-      setTimeout(() => setError(false), 2000)
+      setError('Usuario o contraseña incorrectos')
+      setTimeout(() => setError(null), 2500)
     }
   }
 
   return (
-    <div style={{ minHeight: '100dvh', background: '#080808', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 24px 48px' }}>
+    <div style={{ minHeight: '100dvh', background: '#080808', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 20px 48px', position: 'relative' }}>
       {/* Brand */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 48 }}>
-        <div style={{ width: 90, height: 90, background: '#fff', borderRadius: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20, boxShadow: '0 0 40px rgba(0,230,118,0.15)' }}>
-          <img src={logoImg} alt="Alfa Gama Store logo" style={{ width: 72, height: 72, objectFit: 'contain' }} />
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 28 }}>
+        <div style={{ width: 84, height: 84, background: '#fff', borderRadius: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16, boxShadow: '0 0 35px rgba(0,230,118,0.18)' }}>
+          <img src={logoImg} alt="Alfa Gama Store logo" style={{ width: 68, height: 68, objectFit: 'contain' }} />
         </div>
-        <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 20, fontWeight: 700, color: '#f0f0f0', letterSpacing: '0.05em', textAlign: 'center' }}>
+        <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 19, fontWeight: 700, color: '#f0f0f0', letterSpacing: '0.05em', textAlign: 'center' }}>
           ALFA GAMA STORE
         </div>
-        <div style={{ fontFamily: 'DM Sans, sans-serif', fontSize: 13, color: '#555', marginTop: 4, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+        <div style={{ fontFamily: 'DM Sans, sans-serif', fontSize: 12, color: '#555', marginTop: 4, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
           Moda, Calidad y Estilo
         </div>
       </div>
 
-      {/* Form */}
-      <div style={{ width: '100%', maxWidth: 380, display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <div style={{ position: 'relative' }}>
-          <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#444', display: 'flex' }}>
-            <IconUser />
-          </span>
-          <input
-            value={user}
-            onChange={e => setUser(e.target.value)}
-            placeholder="Usuario"
-            onKeyDown={e => e.key === 'Enter' && handleLogin()}
-            style={{ ...inputStyle, paddingLeft: 44, fontSize: 15 }}
-          />
+      {/* Auth Card */}
+      <div style={{ width: '100%', maxWidth: 380, background: '#0e0e0e', border: '1px solid #1f1f1f', borderRadius: 20, padding: '24px 20px', display: 'flex', flexDirection: 'column', gap: 16, boxShadow: '0 12px 36px rgba(0,0,0,0.6)' }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: '#fff', textAlign: 'center', marginBottom: 4 }}>
+          Iniciar Sesión
         </div>
 
-        <div style={{ position: 'relative' }}>
-          <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#444', display: 'flex' }}>
-            <IconLock />
-          </span>
-          <input
-            value={pass}
-            onChange={e => setPass(e.target.value)}
-            type={showPass ? 'text' : 'password'}
-            placeholder="Contraseña"
-            onKeyDown={e => e.key === 'Enter' && handleLogin()}
-            style={{ ...inputStyle, paddingLeft: 44, paddingRight: 44, fontSize: 15 }}
-          />
-          <button
-            onClick={() => setShowPass(v => !v)}
-            style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#555', cursor: 'pointer', fontSize: 11, fontFamily: 'JetBrains Mono, monospace' }}
-          >
-            {showPass ? 'OCULTAR' : 'VER'}
-          </button>
-        </div>
-
-        {error && (
-          <div style={{ background: 'rgba(255,61,61,0.12)', border: '1px solid rgba(255,61,61,0.25)', borderRadius: 10, padding: '10px 14px', color: '#ff3d3d', fontSize: 13, textAlign: 'center' }}>
-            Usuario o contraseña incorrectos
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ position: 'relative' }}>
+            <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#555', display: 'flex' }}>
+              <IconUser />
+            </span>
+            <input
+              value={user}
+              onChange={e => setUser(e.target.value)}
+              placeholder="Usuario"
+              onKeyDown={e => e.key === 'Enter' && handlePasswordLogin()}
+              style={{ ...inputStyle, paddingLeft: 44, fontSize: 14 }}
+            />
           </div>
-        )}
 
-        <button
-          onClick={handleLogin}
-          style={{ background: '#00e676', color: '#000', border: 'none', borderRadius: 12, padding: '15px', fontSize: 15, fontWeight: 700, cursor: 'pointer', marginTop: 4, letterSpacing: '0.02em', transition: 'opacity 0.15s' }}
-        >
-          Ingresar
-        </button>
+          <div style={{ position: 'relative' }}>
+            <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#555', display: 'flex' }}>
+              <IconLock />
+            </span>
+            <input
+              value={pass}
+              onChange={e => setPass(e.target.value)}
+              type={showPass ? 'text' : 'password'}
+              placeholder="Contraseña"
+              onKeyDown={e => e.key === 'Enter' && handlePasswordLogin()}
+              style={{ ...inputStyle, paddingLeft: 44, paddingRight: 44, fontSize: 14 }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPass(v => !v)}
+              style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#666', cursor: 'pointer', fontSize: 11, fontFamily: 'JetBrains Mono, monospace' }}
+            >
+              {showPass ? 'OCULTAR' : 'VER'}
+            </button>
+          </div>
 
-        <div style={{ textAlign: 'center', fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#333', marginTop: 8 }}>
-          demo: admin / 1234
+          {error && (
+            <div style={{ background: 'rgba(255,61,61,0.12)', border: '1px solid rgba(255,61,61,0.25)', borderRadius: 10, padding: '10px 14px', color: '#ff3d3d', fontSize: 12, textAlign: 'center' }}>
+              {error}
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={handlePasswordLogin}
+            style={{ background: '#00e676', color: '#000', border: 'none', borderRadius: 12, padding: '13px', fontSize: 14, fontWeight: 700, cursor: 'pointer', marginTop: 4 }}
+          >
+            Ingresar
+          </button>
+
+          <div style={{ textAlign: 'center', fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#444' }}>
+            demo: admin / 1234
+          </div>
         </div>
       </div>
 
-      <div style={{ position: 'absolute', bottom: 24, fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#2a2a2a', letterSpacing: '0.06em' }}>
+      <div style={{ position: 'absolute', bottom: 20, fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#2a2a2a', letterSpacing: '0.06em' }}>
         "Tu estilo, nuestra pasión"
       </div>
     </div>
@@ -703,7 +743,33 @@ function InventoryTab({ products, onAdd, onUpdate, onDelete }: { products: Produ
                     <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
                     <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#444' }}>{p.sku} · {p.category}</div>
                   </div>
-                  <StockBadge stock={p.stock} minStock={p.minStock} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <StockBadge stock={p.stock} minStock={p.minStock} />
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setEditProduct(p)
+                        setShowForm(true)
+                      }}
+                      style={{
+                        background: '#181818',
+                        border: '1px solid #2a2a2a',
+                        color: '#4a9eff',
+                        borderRadius: 6,
+                        padding: '3px 8px',
+                        fontSize: 11,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        fontFamily: 'JetBrains Mono, monospace',
+                        fontWeight: 600,
+                      }}
+                    >
+                      <IconEdit size={12} /> Editar
+                    </button>
+                  </div>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   {[{ l: 'PRECIO', v: fmt(p.price), c: '#00e676' }, { l: 'COSTO', v: fmt(p.cost), c: '#888' }, { l: 'MARGEN', v: p.price > 0 ? `${Math.round(((p.price - p.cost) / p.price) * 100)}%` : '0%', c: '#448aff' }].map(({ l, v, c }) => (
@@ -974,9 +1040,608 @@ function NewSaleModal({ products, onSave, onClose }: { products: Product[]; onSa
   )
 }
 
+// ─── Edit Credit Modal ────────────────────────────────────────────────────────
+
+function EditCreditModal({
+  credit,
+  onSave,
+  onDelete,
+  onClose,
+}: {
+  credit: Credit
+  onSave: (c: Credit) => void
+  onDelete: (id: string) => void
+  onClose: () => void
+}) {
+  const [activeTab, setActiveTab] = useState<'info' | 'installments'>('info')
+  const [clientName, setClientName] = useState(credit.clientName)
+  const [clientPhone, setClientPhone] = useState(credit.clientPhone)
+  const [clientAddress, setClientAddress] = useState(credit.clientAddress || '')
+  const [clientDocument, setClientDocument] = useState(credit.clientDocument || '')
+  const [products, setProducts] = useState(credit.products)
+  const [totalSale, setTotalSale] = useState(credit.totalSale.toString())
+  const [frequency, setFrequency] = useState<'semanal' | 'quincenal' | 'mensual'>(credit.paymentFrequency)
+  const [totalQuotas, setTotalQuotas] = useState(credit.totalQuotas.toString())
+  const [quotaValue, setQuotaValue] = useState(credit.quotaValue.toString())
+  const [startDate, setStartDate] = useState(toDateInputValue(credit.startDate))
+  const [generalNotes, setGeneralNotes] = useState(credit.generalNotes || '')
+  const [installments, setInstallments] = useState<CreditInstallment[]>(() =>
+    credit.installments.map(i => ({
+      ...i,
+      dueDate: ensureDate(i.dueDate),
+      paidDate: i.paidDate ? ensureDate(i.paidDate) : null,
+    }))
+  )
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+
+  // Smart Recalculate Installments
+  const handleRecalculateInstallments = (preservePayments: boolean = true) => {
+    const numQuotas = Number(totalQuotas) || installments.length || 1
+    const valPerQuota = Number(quotaValue) || Math.ceil((Number(totalSale) || credit.totalSale) / numQuotas)
+    const sd = fromDateInputValue(startDate)
+
+    const newInsts = generateInstallments(sd, frequency, numQuotas, valPerQuota)
+
+    if (preservePayments) {
+      const combined = newInsts.map((inst, idx) => {
+        const old = installments[idx]
+        if (old) {
+          return {
+            ...inst,
+            paidAmount: old.paidAmount,
+            paidDate: old.paidDate,
+            paymentMethod: old.paymentMethod,
+            notes: old.notes,
+          }
+        }
+        return inst
+      })
+      setInstallments(combined)
+    } else {
+      setInstallments(newInsts)
+    }
+  }
+
+  const handleUpdateInstallment = (index: number, patch: Partial<CreditInstallment>) => {
+    setInstallments(prev => prev.map((inst, i) => (i === index ? { ...inst, ...patch } : inst)))
+  }
+
+  const handleAddInstallment = () => {
+    const last = installments[installments.length - 1]
+    const nextNum = installments.length + 1
+    const lastDate = last ? ensureDate(last.dueDate) : ensureDate(startDate)
+    const nextDue = new Date(lastDate)
+
+    if (frequency === 'semanal') nextDue.setDate(nextDue.getDate() + 7)
+    else if (frequency === 'quincenal') nextDue.setDate(nextDue.getDate() + 15)
+    else {
+      nextDue.setMonth(nextDue.getMonth() + 1)
+    }
+
+    const defaultVal = Number(quotaValue) || (last ? last.quotaValue : 0)
+    setInstallments(prev => [
+      ...prev,
+      {
+        quotaNumber: nextNum,
+        dueDate: nextDue,
+        quotaValue: defaultVal,
+        paidAmount: 0,
+        paidDate: null,
+        paymentMethod: '',
+        notes: '',
+      },
+    ])
+    setTotalQuotas(String(nextNum))
+  }
+
+  const handleDeleteInstallment = (index: number) => {
+    if (installments.length <= 1) return
+    const filtered = installments.filter((_, i) => i !== index).map((inst, i) => ({
+      ...inst,
+      quotaNumber: i + 1,
+    }))
+    setInstallments(filtered)
+    setTotalQuotas(String(filtered.length))
+  }
+
+  const handleSave = () => {
+    if (!clientName.trim() || !products.trim() || Number(totalSale) <= 0) return
+
+    const sd = fromDateInputValue(startDate)
+    const updated: Credit = {
+      ...credit,
+      clientName: clientName.trim(),
+      clientPhone: clientPhone.trim(),
+      clientAddress: clientAddress.trim(),
+      clientDocument: clientDocument.trim(),
+      products: products.trim(),
+      totalSale: Number(totalSale),
+      startDate: sd,
+      paymentFrequency: frequency,
+      totalQuotas: installments.length,
+      quotaValue: Number(quotaValue) || (installments[0]?.quotaValue ?? 0),
+      installments: installments.map(i => ({
+        ...i,
+        dueDate: ensureDate(i.dueDate),
+        paidDate: i.paidDate ? ensureDate(i.paidDate) : null,
+      })),
+      generalNotes: generalNotes.trim(),
+    }
+    onSave(updated)
+    onClose()
+  }
+
+  const sumQuotaValues = installments.reduce((acc, i) => acc + (Number(i.quotaValue) || 0), 0)
+  const sumPaidValues = installments.reduce((acc, i) => acc + (Number(i.paidAmount) || 0), 0)
+  const calculatedPending = Math.max(0, Number(totalSale) - sumPaidValues)
+  const saleMismatch = sumQuotaValues !== Number(totalSale)
+
+  return (
+    <div className="fade-in" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 70, display: 'flex', alignItems: 'flex-end' }}>
+      <div className="slide-up" style={{ background: '#0e0e0e', border: '1px solid #222', borderRadius: '20px 20px 0 0', width: '100%', maxHeight: '94vh', overflowY: 'auto', padding: '20px 16px 40px', display: 'flex', flexDirection: 'column' }}>
+        
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div>
+            <div style={{ fontSize: 17, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <IconEdit size={18} /> Editar crédito completo
+            </div>
+            <div style={{ fontSize: 12, color: '#666', marginTop: 2 }}>{credit.clientName} · ID: {credit.id}</div>
+          </div>
+          <button onClick={onClose} style={{ background: '#1a1a1a', border: 'none', color: '#888', borderRadius: 8, padding: 8, cursor: 'pointer', display: 'flex' }}>
+            <IconX />
+          </button>
+        </div>
+
+        {/* Tab Switcher */}
+        <div style={{ display: 'flex', background: '#141414', borderRadius: 10, padding: 3, marginBottom: 16 }}>
+          <button
+            type="button"
+            onClick={() => setActiveTab('info')}
+            style={{
+              flex: 1,
+              background: activeTab === 'info' ? '#222' : 'transparent',
+              color: activeTab === 'info' ? '#448aff' : '#666',
+              border: 'none',
+              borderRadius: 8,
+              padding: '9px 0',
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.15s',
+            }}
+          >
+            Datos Principales & Montos
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('installments')}
+            style={{
+              flex: 1,
+              background: activeTab === 'installments' ? '#222' : 'transparent',
+              color: activeTab === 'installments' ? '#00e676' : '#666',
+              border: 'none',
+              borderRadius: 8,
+              padding: '9px 0',
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+              transition: 'all 0.15s',
+            }}
+          >
+            Plan de Cuotas ({installments.length})
+            {saleMismatch && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#ff9800' }} />}
+          </button>
+        </div>
+
+        {/* Tab 1: General Info & Conditions */}
+        {activeTab === 'info' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ background: '#121212', border: '1px solid #1e1e1e', borderRadius: 12, padding: '14px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#448aff', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600 }}>
+                Datos del cliente
+              </div>
+              <Field label="Nombre completo">
+                <input value={clientName} onChange={e => setClientName(e.target.value)} style={inputStyle} />
+              </Field>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <Field label="Documento (CC/NIT)">
+                  <input value={clientDocument} onChange={e => setClientDocument(e.target.value)} placeholder="1098765432" style={inputStyle} />
+                </Field>
+                <Field label="Teléfono">
+                  <input value={clientPhone} onChange={e => setClientPhone(e.target.value)} placeholder="300 123 4567" style={inputStyle} />
+                </Field>
+              </div>
+              <Field label="Dirección">
+                <input value={clientAddress} onChange={e => setClientAddress(e.target.value)} placeholder="Cra 5 #12-34" style={inputStyle} />
+              </Field>
+            </div>
+
+            <div style={{ background: '#121212', border: '1px solid #1e1e1e', borderRadius: 12, padding: '14px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#00e676', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600 }}>
+                Condiciones del Crédito
+              </div>
+              <Field label="Producto(s) entregados">
+                <input value={products} onChange={e => setProducts(e.target.value)} style={inputStyle} />
+              </Field>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <Field label="Monto total venta">
+                  <input
+                    value={totalSale}
+                    onChange={e => {
+                      setTotalSale(e.target.value)
+                      if (Number(totalQuotas) > 0 && Number(e.target.value) > 0) {
+                        setQuotaValue(String(Math.ceil(Number(e.target.value) / Number(totalQuotas))))
+                      }
+                    }}
+                    type="number"
+                    style={{ ...inputStyle, fontFamily: 'JetBrains Mono, monospace', color: '#00e676', fontWeight: 600 }}
+                  />
+                </Field>
+                <Field label="N° de cuotas">
+                  <input
+                    value={totalQuotas}
+                    onChange={e => {
+                      setTotalQuotas(e.target.value)
+                      if (Number(e.target.value) > 0 && Number(totalSale) > 0) {
+                        setQuotaValue(String(Math.ceil(Number(totalSale) / Number(e.target.value))))
+                      }
+                    }}
+                    type="number"
+                    style={{ ...inputStyle, fontFamily: 'JetBrains Mono, monospace' }}
+                  />
+                </Field>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <Field label="Valor pactado por cuota">
+                  <input
+                    value={quotaValue}
+                    onChange={e => setQuotaValue(e.target.value)}
+                    type="number"
+                    style={{ ...inputStyle, fontFamily: 'JetBrains Mono, monospace' }}
+                  />
+                </Field>
+                <Field label="Fecha de inicio / registro">
+                  <input
+                    value={startDate}
+                    onChange={e => setStartDate(e.target.value)}
+                    type="date"
+                    style={{ ...inputStyle, fontFamily: 'JetBrains Mono, monospace', colorScheme: 'dark' }}
+                  />
+                </Field>
+              </div>
+
+              <div>
+                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: '#555', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>
+                  Frecuencia de cobro
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {(['semanal', 'quincenal', 'mensual'] as const).map(f => (
+                    <button
+                      key={f}
+                      type="button"
+                      onClick={() => setFrequency(f)}
+                      style={{
+                        flex: 1,
+                        background: frequency === f ? 'rgba(68,138,255,0.15)' : '#161616',
+                        color: frequency === f ? '#448aff' : '#666',
+                        border: `1px solid ${frequency === f ? '#448aff' : '#222'}`,
+                        borderRadius: 10,
+                        padding: '9px 0',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        textTransform: 'capitalize',
+                      }}
+                    >
+                      {FREQ_LABELS[f]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Recalculate Button */}
+              <div style={{ borderTop: '1px solid #1a1a1a', paddingTop: 10, display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => handleRecalculateInstallments(true)}
+                  style={{
+                    flex: 1,
+                    background: '#1a1a1a',
+                    border: '1px solid #333',
+                    color: '#448aff',
+                    borderRadius: 10,
+                    padding: '10px 12px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                  }}
+                >
+                  <IconRefresh size={14} /> Recalcular cuotas (conservar pagos)
+                </button>
+              </div>
+            </div>
+
+            <Field label="Observaciones generales">
+              <textarea
+                value={generalNotes}
+                onChange={e => setGeneralNotes(e.target.value)}
+                placeholder="Observaciones, acuerdos o condiciones especiales..."
+                rows={3}
+                style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
+              />
+            </Field>
+          </div>
+        )}
+
+        {/* Tab 2: Installments Detail Editor */}
+        {activeTab === 'installments' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {/* Real-time financial summary */}
+            <div style={{ background: '#121212', border: '1px solid #1e1e1e', borderRadius: 12, padding: '12px 14px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                <div>
+                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#555', textTransform: 'uppercase' }}>Total Venta</div>
+                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, fontWeight: 700, color: '#f0f0f0' }}>{fmt(Number(totalSale) || 0)}</div>
+                </div>
+                <div>
+                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#00a854', textTransform: 'uppercase' }}>Abonado</div>
+                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, fontWeight: 700, color: '#00e676' }}>{fmt(sumPaidValues)}</div>
+                </div>
+                <div>
+                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#cc3333', textTransform: 'uppercase' }}>Saldo Real</div>
+                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, fontWeight: 700, color: '#ff3d3d' }}>{fmt(calculatedPending)}</div>
+                </div>
+              </div>
+
+              {saleMismatch && (
+                <div style={{ marginTop: 10, padding: '6px 10px', background: 'rgba(255,152,0,0.1)', border: '1px solid rgba(255,152,0,0.25)', borderRadius: 8, fontSize: 11, color: '#ff9800', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <IconAlert />
+                  <span>Suma de cuotas ({fmt(sumQuotaValues)}) difiere del total de venta ({fmt(Number(totalSale) || 0)})</span>
+                </div>
+              )}
+            </div>
+
+            {/* List of individual installments */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {installments.map((inst, idx) => {
+                const s = instStatus(inst)
+                return (
+                  <div
+                    key={idx}
+                    style={{
+                      background: '#121212',
+                      border: `1px solid ${s === 'vencido' ? 'rgba(255,61,61,0.3)' : '#1e1e1e'}`,
+                      borderRadius: 12,
+                      padding: '12px 14px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 10,
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, fontWeight: 700, color: '#448aff' }}>
+                          Cuota {inst.quotaNumber}
+                        </span>
+                        <InstStatusBadge status={s} />
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteInstallment(idx)}
+                          disabled={installments.length <= 1}
+                          title="Eliminar cuota"
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: installments.length <= 1 ? '#333' : '#ff3d3d',
+                            cursor: installments.length <= 1 ? 'not-allowed' : 'pointer',
+                            padding: 4,
+                            display: 'flex',
+                          }}
+                        >
+                          <IconTrash />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      <Field label="Fecha Vencimiento">
+                        <input
+                          type="date"
+                          value={toDateInputValue(inst.dueDate)}
+                          onChange={e => handleUpdateInstallment(idx, { dueDate: fromDateInputValue(e.target.value) })}
+                          style={{ ...inputStyle, padding: '8px 10px', fontSize: 12, fontFamily: 'JetBrains Mono, monospace', colorScheme: 'dark' }}
+                        />
+                      </Field>
+                      <Field label="Valor Cuota">
+                        <input
+                          type="number"
+                          value={inst.quotaValue}
+                          onChange={e => handleUpdateInstallment(idx, { quotaValue: Number(e.target.value) || 0 })}
+                          style={{ ...inputStyle, padding: '8px 10px', fontSize: 12, fontFamily: 'JetBrains Mono, monospace' }}
+                        />
+                      </Field>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      <Field label="Monto Abonado">
+                        <input
+                          type="number"
+                          value={inst.paidAmount}
+                          onChange={e => handleUpdateInstallment(idx, { paidAmount: Number(e.target.value) || 0 })}
+                          style={{ ...inputStyle, padding: '8px 10px', fontSize: 12, fontFamily: 'JetBrains Mono, monospace', color: inst.paidAmount > 0 ? '#00e676' : '#f0f0f0' }}
+                        />
+                      </Field>
+                      <Field label="Fecha de Pago">
+                        <input
+                          type="date"
+                          value={toDateInputValue(inst.paidDate)}
+                          onChange={e => handleUpdateInstallment(idx, { paidDate: e.target.value ? fromDateInputValue(e.target.value) : null })}
+                          style={{ ...inputStyle, padding: '8px 10px', fontSize: 12, fontFamily: 'JetBrains Mono, monospace', colorScheme: 'dark' }}
+                        />
+                      </Field>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      <Field label="Método">
+                        <select
+                          value={inst.paymentMethod}
+                          onChange={e => handleUpdateInstallment(idx, { paymentMethod: e.target.value })}
+                          style={{ ...inputStyle, padding: '8px 10px', fontSize: 12, background: '#161616' }}
+                        >
+                          <option value="">(Sin definir)</option>
+                          <option value="efectivo">Efectivo</option>
+                          <option value="tarjeta">Tarjeta</option>
+                          <option value="transferencia">Transferencia</option>
+                        </select>
+                      </Field>
+                      <Field label="Nota / Comprobante">
+                        <input
+                          value={inst.notes}
+                          onChange={e => handleUpdateInstallment(idx, { notes: e.target.value })}
+                          placeholder="Ref de pago..."
+                          style={{ ...inputStyle, padding: '8px 10px', fontSize: 12 }}
+                        />
+                      </Field>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Add extra installment */}
+            <button
+              type="button"
+              onClick={handleAddInstallment}
+              style={{
+                width: '100%',
+                background: '#161616',
+                border: '1px dashed #333',
+                color: '#448aff',
+                borderRadius: 12,
+                padding: '12px',
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+              }}
+            >
+              <IconPlus size={16} /> Agregar cuota adicional
+            </button>
+          </div>
+        )}
+
+        {/* Footer Actions */}
+        <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <button
+            type="button"
+            onClick={handleSave}
+            style={{
+              width: '100%',
+              background: '#448aff',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 12,
+              padding: '14px',
+              fontSize: 15,
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            Guardar todos los cambios
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowDeleteConfirm(true)}
+            style={{
+              width: '100%',
+              background: 'rgba(255,61,61,0.08)',
+              border: '1px solid rgba(255,61,61,0.25)',
+              color: '#ff3d3d',
+              borderRadius: 12,
+              padding: '12px',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+            }}
+          >
+            <IconTrash /> Eliminar este crédito
+          </button>
+        </div>
+
+        {/* Delete Confirmation Dialog */}
+        {showDeleteConfirm && (
+          <div className="fade-in" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+            <div style={{ background: '#141414', border: '1px solid #333', borderRadius: 16, padding: '20px', maxWidth: 360, width: '100%', textAlign: 'center' }}>
+              <div style={{ color: '#ff3d3d', marginBottom: 10, display: 'flex', justifyContent: 'center' }}>
+                <IconAlert />
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>¿Eliminar crédito?</div>
+              <div style={{ fontSize: 13, color: '#888', marginBottom: 18 }}>
+                Esta acción borrará permanentemente el crédito de <strong>{credit.clientName}</strong> y su historial de pagos.
+              </div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteConfirm(false)}
+                  style={{ flex: 1, background: '#222', border: 'none', color: '#888', borderRadius: 10, padding: '11px 0', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onDelete(credit.id)
+                    setShowDeleteConfirm(false)
+                    onClose()
+                  }}
+                  style={{ flex: 1, background: '#ff3d3d', border: 'none', color: '#000', borderRadius: 10, padding: '11px 0', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Sí, eliminar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+      </div>
+    </div>
+  )
+}
+
 // ─── Credit Tab ───────────────────────────────────────────────────────────────
 
-function CreditTab({ credits, onAdd, onUpdate }: { credits: Credit[]; onAdd: (c: Credit) => void; onUpdate: (c: Credit) => void }) {
+function CreditTab({
+  credits,
+  onAdd,
+  onUpdate,
+  onDelete,
+}: {
+  credits: Credit[]
+  onAdd: (c: Credit) => void
+  onUpdate: (c: Credit) => void
+  onDelete: (id: string) => void
+}) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [showNewForm, setShowNewForm] = useState(false)
   const [showFinalized, setShowFinalized] = useState(false)
@@ -985,7 +1650,17 @@ function CreditTab({ credits, onAdd, onUpdate }: { credits: Credit[]; onAdd: (c:
   const selected = credits.find(c => c.id === selectedId) ?? null
 
   if (selected) {
-    return <CreditDetail credit={selected} onBack={() => setSelectedId(null)} onUpdate={onUpdate} />
+    return (
+      <CreditDetail
+        credit={selected}
+        onBack={() => setSelectedId(null)}
+        onUpdate={onUpdate}
+        onDelete={id => {
+          onDelete(id)
+          setSelectedId(null)
+        }}
+      />
+    )
   }
 
   const activeCredits = useMemo(() => credits.filter(c => creditStatus(c) !== 'finalizado'), [credits])
@@ -1067,9 +1742,14 @@ function CreditTab({ credits, onAdd, onUpdate }: { credits: Credit[]; onAdd: (c:
                         {c.clientDocument && <span style={{ color: '#666' }}>· CC: {c.clientDocument}</span>}
                       </div>
                     </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 15, fontWeight: 700, color: '#ff3d3d', marginBottom: 4 }}>{fmt(pendingBalance(c))}</div>
-                      <StatusBadge status={st} />
+                    <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                      <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 15, fontWeight: 700, color: '#ff3d3d' }}>{fmt(pendingBalance(c))}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <StatusBadge status={st} />
+                        <span style={{ fontSize: 11, color: '#4a9eff', display: 'flex', alignItems: 'center', gap: 3, fontFamily: 'JetBrains Mono, monospace', background: '#161616', border: '1px solid #282828', borderRadius: 4, padding: '2px 6px' }}>
+                          <IconEdit size={10} /> Editar
+                        </span>
+                      </div>
                     </div>
                   </div>
                   <ProgressBar pct={pct} color={st === 'mora' ? '#ff9800' : st === 'finalizado' ? '#448aff' : '#00e676'} />
@@ -1186,8 +1866,19 @@ function FinalizedCreditsModal({ credits, onSelectCredit, onClose }: { credits: 
 
 // ─── Credit Detail ────────────────────────────────────────────────────────────
 
-function CreditDetail({ credit, onBack, onUpdate }: { credit: Credit; onBack: () => void; onUpdate: (c: Credit) => void }) {
+function CreditDetail({
+  credit,
+  onBack,
+  onUpdate,
+  onDelete,
+}: {
+  credit: Credit
+  onBack: () => void
+  onUpdate: (c: Credit) => void
+  onDelete: (id: string) => void
+}) {
   const [showPayment, setShowPayment] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
   const st = creditStatus(credit)
   const pct = progressPct(credit)
   const paid = totalPaid(credit)
@@ -1206,12 +1897,30 @@ function CreditDetail({ credit, onBack, onUpdate }: { credit: Credit; onBack: ()
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Header */}
       <div style={{ padding: '12px 16px 0', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
           <button onClick={onBack} style={{ background: '#1a1a1a', border: 'none', color: '#888', borderRadius: 8, padding: 8, cursor: 'pointer', display: 'flex' }}><IconBack /></button>
           <div style={{ flex: 1 }}>
             <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: '#555', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Crédito</div>
             <div style={{ fontSize: 16, fontWeight: 600 }}>{credit.clientName}</div>
           </div>
+          <button
+            onClick={() => setShowEditModal(true)}
+            style={{
+              background: '#1a1a1a',
+              border: '1px solid #333',
+              color: '#448aff',
+              borderRadius: 8,
+              padding: '6px 12px',
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+            }}
+          >
+            <IconEdit size={14} /> Editar
+          </button>
           <StatusBadge status={st} />
         </div>
         <div style={{ height: 1, background: '#1e1e1e' }} />
@@ -1235,7 +1944,15 @@ function CreditDetail({ credit, onBack, onUpdate }: { credit: Credit; onBack: ()
 
         {/* Client info */}
         <div style={{ background: '#111', border: '1px solid #1e1e1e', borderRadius: 12, padding: '14px', marginBottom: 10 }}>
-          <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: '#448aff', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10 }}>Datos del cliente</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: '#448aff', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Datos del cliente</div>
+            <button
+              onClick={() => setShowEditModal(true)}
+              style={{ background: 'transparent', border: 'none', color: '#448aff', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'JetBrains Mono, monospace' }}
+            >
+              <IconEdit size={12} /> Modificar
+            </button>
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div>
               <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: '#555', marginBottom: 2 }}>NOMBRE</div>
@@ -1319,15 +2036,21 @@ function CreditDetail({ credit, onBack, onUpdate }: { credit: Credit; onBack: ()
           </div>
         )}
 
-        {/* Register payment button */}
-        {st !== 'finalizado' && (
-          <button onClick={() => setShowPayment(true)} style={{ width: '100%', background: '#448aff', color: '#fff', border: 'none', borderRadius: 12, padding: '13px', fontSize: 14, fontWeight: 700, cursor: 'pointer', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-            <IconCheck /> Registrar pago
+        {/* Actions grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: st !== 'finalizado' ? '1fr 1fr' : '1fr', gap: 10, marginBottom: 14 }}>
+          {st !== 'finalizado' && (
+            <button onClick={() => setShowPayment(true)} style={{ background: '#448aff', color: '#fff', border: 'none', borderRadius: 12, padding: '13px', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+              <IconCheck /> Registrar pago
+            </button>
+          )}
+
+          <button onClick={() => setShowEditModal(true)} style={{ background: '#1a1a1a', border: '1px solid #333', color: '#448aff', borderRadius: 12, padding: '13px', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            <IconEdit size={16} /> Editar crédito
           </button>
-        )}
+        </div>
 
         {/* Compartir Extracto PDF */}
-        <button onClick={() => exportToPDF(credit)} style={{ width: '100%', background: '#1a1a1a', border: '1px solid #222', color: '#00e676', borderRadius: 12, padding: '13px', fontSize: 14, fontWeight: 700, cursor: 'pointer', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'all 0.2s' }}>
+        <button onClick={() => exportToPDF(credit)} style={{ width: '100%', background: '#141414', border: '1px solid #222', color: '#00e676', borderRadius: 12, padding: '13px', fontSize: 14, fontWeight: 700, cursor: 'pointer', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'all 0.2s' }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
           </svg>
@@ -1336,8 +2059,14 @@ function CreditDetail({ credit, onBack, onUpdate }: { credit: Credit; onBack: ()
 
         {/* Payment plan table */}
         <div style={{ background: '#111', border: '1px solid #1e1e1e', borderRadius: 12, overflow: 'hidden', marginBottom: 14 }}>
-          <div style={{ padding: '12px 14px', borderBottom: '1px solid #1e1e1e', background: '#0d1a33' }}>
+          <div style={{ padding: '12px 14px', borderBottom: '1px solid #1e1e1e', background: '#0d1a33', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#4a9eff' }}>Plan de pagos</span>
+            <button
+              onClick={() => setShowEditModal(true)}
+              style={{ background: 'transparent', border: 'none', color: '#4a9eff', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'JetBrains Mono, monospace' }}
+            >
+              <IconEdit size={12} /> Editar cuotas
+            </button>
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 580 }}>
@@ -1353,7 +2082,12 @@ function CreditDetail({ credit, onBack, onUpdate }: { credit: Credit; onBack: ()
                   const s = instStatus(inst)
                   const isEven = idx % 2 === 0
                   return (
-                    <tr key={inst.quotaNumber} style={{ background: isEven ? '#0e0e0e' : '#111' }}>
+                    <tr
+                      key={inst.quotaNumber}
+                      onClick={() => setShowEditModal(true)}
+                      title="Haz clic para editar esta cuota"
+                      style={{ background: isEven ? '#0e0e0e' : '#111', cursor: 'pointer' }}
+                    >
                       <td style={{ padding: '9px 10px', fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: '#555', borderBottom: '1px solid #151515' }}>{inst.quotaNumber}</td>
                       <td style={{ padding: '9px 10px', fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: s === 'vencido' ? '#ff3d3d' : '#888', borderBottom: '1px solid #151515', whiteSpace: 'nowrap' }}>{fmtDate(inst.dueDate)}</td>
                       <td style={{ padding: '9px 10px', fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: '#888', borderBottom: '1px solid #151515', whiteSpace: 'nowrap' }}>{fmt(inst.quotaValue)}</td>
@@ -1390,6 +2124,15 @@ function CreditDetail({ credit, onBack, onUpdate }: { credit: Credit; onBack: ()
           credit={credit}
           onSave={updatedCredit => { onUpdate(updatedCredit); setShowPayment(false) }}
           onClose={() => setShowPayment(false)}
+        />
+      )}
+
+      {showEditModal && (
+        <EditCreditModal
+          credit={credit}
+          onSave={updatedCredit => { onUpdate(updatedCredit); setShowEditModal(false) }}
+          onDelete={id => onDelete(id)}
+          onClose={() => setShowEditModal(false)}
         />
       )}
     </div>
@@ -1605,13 +2348,83 @@ type Tab = 'dashboard' | 'inventory' | 'credit' | 'sales'
 
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false)
-  const [products, setProducts] = useState<Product[]>(SEED_PRODUCTS)
-  const [sales, setSales] = useState<Sale[]>(SEED_SALES)
-  const [credits, setCredits] = useState<Credit[]>(SEED_CREDITS)
+
+  // Persistent States
+  const [products, setProducts] = useState<Product[]>(() => {
+    try {
+      const saved = localStorage.getItem('alfagama_products')
+      return saved ? JSON.parse(saved) : SEED_PRODUCTS
+    } catch {
+      return SEED_PRODUCTS
+    }
+  })
+
+  const [sales, setSales] = useState<Sale[]>(() => {
+    try {
+      const saved = localStorage.getItem('alfagama_sales')
+      if (!saved) return SEED_SALES
+      return JSON.parse(saved).map((s: any) => ({
+        ...s,
+        createdAt: ensureDate(s.createdAt),
+      }))
+    } catch {
+      return SEED_SALES
+    }
+  })
+
+  const [credits, setCredits] = useState<Credit[]>(() => {
+    try {
+      const saved = localStorage.getItem('alfagama_credits')
+      if (!saved) return SEED_CREDITS
+      return JSON.parse(saved).map((c: any) => ({
+        ...c,
+        startDate: ensureDate(c.startDate),
+        installments: (c.installments || []).map((i: any) => ({
+          ...i,
+          dueDate: ensureDate(i.dueDate),
+          paidDate: i.paidDate ? ensureDate(i.paidDate) : null,
+        })),
+      }))
+    } catch {
+      return SEED_CREDITS
+    }
+  })
+
   const [tab, setTab] = useState<Tab>('dashboard')
   const [showNewSale, setShowNewSale] = useState(false)
 
-  if (!isLoggedIn) return <LoginScreen onLogin={() => setIsLoggedIn(true)} />
+  // Sync with LocalStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('alfagama_products', JSON.stringify(products))
+    } catch (e) {
+      console.error(e)
+    }
+  }, [products])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('alfagama_sales', JSON.stringify(sales))
+    } catch (e) {
+      console.error(e)
+    }
+  }, [sales])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('alfagama_credits', JSON.stringify(credits))
+    } catch (e) {
+      console.error(e)
+    }
+  }, [credits])
+
+  if (!isLoggedIn) {
+    return (
+      <LoginScreen
+        onLogin={() => setIsLoggedIn(true)}
+      />
+    )
+  }
 
   const handleAddProduct = (p: Product) => setProducts(prev => [...prev, p])
   const handleUpdateProduct = (p: Product) => setProducts(prev => prev.map(x => x.id === p.id ? p : x))
@@ -1623,6 +2436,7 @@ export default function App() {
   }
   const handleAddCredit = (c: Credit) => setCredits(prev => [...prev, c])
   const handleUpdateCredit = (c: Credit) => setCredits(prev => prev.map(x => x.id === c.id ? c : x))
+  const handleDeleteCredit = (id: string) => setCredits(prev => prev.filter(x => x.id !== id))
 
   const lowStockCount = products.filter(p => p.stock <= p.minStock).length
   const creditMoraCount = credits.filter(c => creditStatus(c) === 'mora').length
@@ -1640,16 +2454,18 @@ export default function App() {
             <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#444', letterSpacing: '0.06em' }}>MODA · CALIDAD · ESTILO</div>
           </div>
         </div>
-        <button onClick={() => setIsLoggedIn(false)} style={{ background: '#1a1a1a', border: 'none', color: '#555', borderRadius: 8, padding: 7, cursor: 'pointer', display: 'flex' }}>
-          <IconLogout />
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button onClick={() => setIsLoggedIn(false)} title="Cerrar sesión" style={{ background: '#1a1a1a', border: '1px solid #282828', color: '#888', borderRadius: 8, padding: '7px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontFamily: 'JetBrains Mono, monospace' }}>
+            <IconLogout /> Salir
+          </button>
+        </div>
       </div>
 
       {/* Content */}
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         {tab === 'dashboard' && <DashboardTab products={products} sales={sales} credits={credits} />}
         {tab === 'inventory' && <InventoryTab products={products} onAdd={handleAddProduct} onUpdate={handleUpdateProduct} onDelete={handleDeleteProduct} />}
-        {tab === 'credit' && <CreditTab credits={credits} onAdd={handleAddCredit} onUpdate={handleUpdateCredit} />}
+        {tab === 'credit' && <CreditTab credits={credits} onAdd={handleAddCredit} onUpdate={handleUpdateCredit} onDelete={handleDeleteCredit} />}
         {tab === 'sales' && <SalesTab sales={sales} />}
       </div>
 
@@ -1693,3 +2509,4 @@ function NavBtn({ label, active, onClick, children, badge, badgeColor = '#ff9800
     </button>
   )
 }
+

@@ -55,3 +55,30 @@ input, button, select {
 
 .slide-up { animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
 .fade-in { animation: fadeIn 0.2s ease; }
+
+@keyframes pulseGlow {
+  0% { transform: scale(0.96); box-shadow: 0 0 0 0 rgba(0, 230, 118, 0.45); }
+  70% { transform: scale(1.04); box-shadow: 0 0 0 16px rgba(0, 230, 118, 0); }
+  100% { transform: scale(0.96); box-shadow: 0 0 0 0 rgba(0, 230, 118, 0); }
+}
+
+@keyframes scanLine {
+  0% { top: 10%; opacity: 0.2; }
+  50% { opacity: 0.9; }
+  100% { top: 90%; opacity: 0.2; }
+}
+
+.biometric-pulse {
+  animation: pulseGlow 2s infinite ease-in-out;
+}
+
+.scan-beam {
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  height: 2px;
+  background: #00e676;
+  box-shadow: 0 0 10px #00e676;
+  animation: scanLine 1.8s infinite ease-in-out alternate;
+}
+
