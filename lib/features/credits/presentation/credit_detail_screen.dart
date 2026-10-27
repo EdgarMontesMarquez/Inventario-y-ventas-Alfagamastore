@@ -1,5 +1,3 @@
-import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -34,18 +32,18 @@ class CreditDetailScreen extends ConsumerWidget {
   void _openPaymentSheet(BuildContext context, WidgetRef ref, Credit credit) {
     CustomOverlays.showBottomSheet(
       context: context,
-      title: 'Registrar pago',
+      title: 'Registrar abono a crédito',
       child: _RegisterPaymentSheet(
         credit: credit,
-        onSave: (updatedCredit) async {
+        onSave: (payment, updatedCredit) async {
           final repo = ref.read(creditRepositoryProvider);
-          await repo.updateCredit(updatedCredit);
+          await repo.addPayment(credit.id, payment, updatedCredit);
           ref.invalidate(creditsFutureProvider);
           if (context.mounted) {
             Navigator.pop(context);
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Pago de cuota registrado exitosamente'),
+              SnackBar(
+                content: Text('Abono de ${CurrencyUtils.format(payment.amount)} registrado exitosamente'),
                 backgroundColor: ColorTokens.lightBrandPrimary,
               ),
             );
@@ -450,7 +448,7 @@ class CreditDetailScreen extends ConsumerWidget {
                     color: PdfColor.fromInt(0x0D1A33),
                   ),
                   children: [
-                    for (var header in ['N°', 'Fecha', 'Cuota', 'Abono', 'Saldo', 'Estado', 'Obs.'])
+                    for (var header in ['N°', 'Vencimiento', 'Valor Cuota', 'Abonado', 'Saldo Cuota', 'Estado'])
                       pw.Container(
                         padding: const pw.EdgeInsets.all(4),
                         alignment: pw.Alignment.centerLeft,
@@ -477,9 +475,7 @@ class CreditDetailScreen extends ConsumerWidget {
                             ? PdfColors.orange700 
                             : (statusKey == 'vencido' ? PdfColors.red700 : PdfColors.grey700));
 
-                    final obsText = inst.paymentMethod.isNotEmpty 
-                        ? inst.paymentMethod 
-                        : (inst.notes.isNotEmpty ? inst.notes : '-');
+                    final quotaBal = (inst.quotaValue - inst.paidAmount).clamp(0.0, double.infinity);
 
                     return pw.TableRow(
                       decoration: pw.BoxDecoration(
@@ -492,14 +488,7 @@ class CreditDetailScreen extends ConsumerWidget {
                         ),
                         pw.Padding(
                           padding: const pw.EdgeInsets.all(4),
-                          child: pw.Column(
-                            crossAxisAlignment: pw.CrossAxisAlignment.start,
-                            children: [
-                              pw.Text(df.format(inst.dueDate), style: const pw.TextStyle(fontSize: 7.5)),
-                              if (inst.paidDate != null && inst.paidAmount > 0)
-                                pw.Text('Pagó: ${df.format(inst.paidDate!)}', style: const pw.TextStyle(fontSize: 6.5, color: PdfColors.green800)),
-                            ],
-                          ),
+                          child: pw.Text(df.format(inst.dueDate), style: const pw.TextStyle(fontSize: 7.5)),
                         ),
                         pw.Padding(
                           padding: const pw.EdgeInsets.all(4),
@@ -507,11 +496,14 @@ class CreditDetailScreen extends ConsumerWidget {
                         ),
                         pw.Padding(
                           padding: const pw.EdgeInsets.all(4),
-                          child: pw.Text(inst.paidAmount > 0 ? cf.format(inst.paidAmount) : '-', style: const pw.TextStyle(fontSize: 7.5)),
+                          child: pw.Text(
+                            inst.paidAmount > 0 ? cf.format(inst.paidAmount) : '-', 
+                            style: pw.TextStyle(fontSize: 7.5, color: inst.paidAmount > 0 ? PdfColors.green800 : PdfColors.grey700, fontWeight: inst.paidAmount > 0 ? pw.FontWeight.bold : pw.FontWeight.normal),
+                          ),
                         ),
                         pw.Padding(
                           padding: const pw.EdgeInsets.all(4),
-                          child: pw.Text(cf.format(r['balance']), style: const pw.TextStyle(fontSize: 7.5)),
+                          child: pw.Text(cf.format(quotaBal), style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold)),
                         ),
                         pw.Padding(
                           padding: const pw.EdgeInsets.all(4),
@@ -524,15 +516,54 @@ class CreditDetailScreen extends ConsumerWidget {
                             ),
                           ),
                         ),
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.all(4),
-                          child: pw.Text(obsText, style: const pw.TextStyle(fontSize: 7.5)),
-                        ),
                       ],
                     );
                   }(),
               ],
             ),
+
+            // Historial de Abonos Recibidos en el PDF si existen
+            if (credit.payments.isNotEmpty) ...[
+              pw.SizedBox(height: 12),
+              pw.Text(
+                'HISTORIAL DE ABONOS RECIBIDOS',
+                style: pw.TextStyle(
+                  color: const PdfColor.fromInt(0x0D1A33),
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 4),
+              pw.Table(
+                border: pw.TableBorder.all(color: PdfColors.grey200, width: 0.5),
+                children: [
+                  pw.TableRow(
+                    decoration: const pw.BoxDecoration(color: PdfColor.fromInt(0x0D1A33)),
+                    children: [
+                      for (var h in ['N°', 'Fecha y Hora', 'Valor Abonado', 'Método', 'Observación / Ref.'])
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(4),
+                          child: pw.Text(h, style: pw.TextStyle(color: PdfColors.white, fontSize: 7.5, fontWeight: pw.FontWeight.bold)),
+                        ),
+                    ],
+                  ),
+                  for (int i = 0; i < credit.payments.length; i++)
+                    () {
+                      final p = credit.payments[i];
+                      return pw.TableRow(
+                        decoration: pw.BoxDecoration(color: i % 2 == 0 ? PdfColors.white : PdfColors.grey50),
+                        children: [
+                          pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text('${i + 1}', style: const pw.TextStyle(fontSize: 7))),
+                          pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(DateFormat('dd/MM/yyyy hh:mm a').format(p.paymentDate), style: const pw.TextStyle(fontSize: 7))),
+                          pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(cf.format(p.amount), style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold, color: PdfColors.green800))),
+                          pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(p.paymentMethod.toUpperCase(), style: const pw.TextStyle(fontSize: 7))),
+                          pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(p.notes.isNotEmpty ? p.notes : '-', style: const pw.TextStyle(fontSize: 7))),
+                        ],
+                      );
+                    }(),
+                ],
+              ),
+            ],
             
             // Observaciones Generales
             if (credit.generalNotes.isNotEmpty) ...[
@@ -950,8 +981,8 @@ class CreditDetailScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 20),
 
-                // Sección: Comprobantes de Transferencia
-                _buildTransferReceiptsSection(context, credit),
+                // Sección: Historial de Abonos Recibidos y Comprobantes
+                _buildPaymentsHistorySection(context, credit),
               ],
             ),
           );
@@ -1093,30 +1124,50 @@ class CreditDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildTransferReceiptsSection(BuildContext context, Credit credit) {
-    final receiptInsts = credit.installments
-        .where((i) => i.receiptImageUrl != null && i.receiptImageUrl!.trim().isNotEmpty)
-        .toList();
+  Widget _buildPaymentsHistorySection(BuildContext context, Credit credit) {
+    final df = DateFormat('dd/MM/yyyy hh:mm a');
+    final payments = credit.payments;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Icon(Icons.receipt_long_outlined, color: ColorTokens.lightBrandPrimary, size: 20),
-            const SizedBox(width: 8),
-            Text(
-              'COMPROBANTES DE TRANSFERENCIA',
-              style: FontTokens.label.copyWith(
-                color: ColorTokens.lightBrandPrimary,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.8,
+    // Fallback si aún no hay credit.payments pero hay cuotas con comprobantes
+    if (payments.isEmpty) {
+      final receiptInsts = credit.installments
+          .where((i) => i.receiptImageUrl != null && i.receiptImageUrl!.trim().isNotEmpty)
+          .toList();
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.history_edu_outlined, color: ColorTokens.lightBrandPrimary, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'HISTORIAL DE ABONOS RECIBIDOS',
+                    style: FontTokens.label.copyWith(
+                      color: ColorTokens.lightBrandPrimary,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        if (receiptInsts.isEmpty)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: ColorTokens.lightBrandPrimary.withAlpha(20),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '0 abonos registrados',
+                  style: FontTokens.label.copyWith(color: ColorTokens.lightBrandPrimary, fontWeight: FontWeight.bold, fontSize: 10),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
@@ -1131,112 +1182,141 @@ class CreditDetailScreen extends ConsumerWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'No hay comprobantes de transferencia adjuntos para este crédito.',
+                    receiptInsts.isEmpty 
+                      ? 'No hay abonos individuales registrados aún para este crédito.'
+                      : 'Hay comprobantes de transferencia guardados en las cuotas anteriores.',
                     style: FontTokens.bodySmall.copyWith(color: ColorTokens.lightTextSecondary),
                   ),
                 ),
               ],
             ),
-          )
-        else
-          ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: receiptInsts.length,
-            separatorBuilder: (context, idx) => const SizedBox(height: 8),
-            itemBuilder: (context, idx) {
-              final inst = receiptInsts[idx];
-              final dateStr = inst.paidDate != null
-                  ? DateFormat('dd/MM/yyyy hh:mm a').format(inst.paidDate!)
-                  : DateFormat('dd/MM/yyyy').format(inst.dueDate);
-              final clean = inst.receiptImageUrl!.trim();
+          ),
+        ],
+      );
+    }
 
-              Widget imgWidget;
-              if (clean.startsWith('data:image') || clean.length > 500) {
-                try {
-                  final base64Str = clean.contains(',') ? clean.split(',').last : clean;
-                  final bytes = base64Decode(base64Str);
-                  imgWidget = Image.memory(bytes, fit: BoxFit.cover, width: 52, height: 52);
-                } catch (_) {
-                  imgWidget = Container(width: 52, height: 52, color: ColorTokens.lightBgSecondary, child: const Icon(Icons.broken_image_outlined, color: ColorTokens.lightTextSecondary));
-                }
-              } else if (clean.startsWith('http://') || clean.startsWith('https://')) {
-                imgWidget = Image.network(clean, fit: BoxFit.cover, width: 52, height: 52, errorBuilder: (c, e, st) => Container(width: 52, height: 52, color: ColorTokens.lightBgSecondary, child: const Icon(Icons.broken_image_outlined, color: ColorTokens.lightTextSecondary)));
-              } else {
-                final f = File(clean);
-                if (f.existsSync()) {
-                  imgWidget = Image.file(f, fit: BoxFit.cover, width: 52, height: 52);
-                } else {
-                  imgWidget = Container(width: 52, height: 52, color: ColorTokens.lightBgSecondary, child: const Icon(Icons.receipt_long_outlined, color: ColorTokens.lightTextSecondary));
-                }
-              }
-
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: ColorTokens.lightBorderSubtle),
-                  boxShadow: BorderShadowTokens.shadowClayCard,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.history_edu_outlined, color: ColorTokens.lightBrandPrimary, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'HISTORIAL DE ABONOS RECIBIDOS',
+                  style: FontTokens.label.copyWith(
+                    color: ColorTokens.lightBrandPrimary,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.8,
+                  ),
                 ),
-                child: Row(
-                  children: [
-                    // Miniatura en la izquierda
-                    GestureDetector(
-                      onTap: () => ImageViewerModal.show(context, imageUrl: clean, title: 'Comprobante Cuota #${inst.quotaNumber}'),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: SizedBox(
-                          width: 52,
-                          height: 52,
-                          child: imgWidget,
-                        ),
-                      ),
+              ],
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: ColorTokens.statusSuccess.withAlpha(20),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                '${payments.length} abono${payments.length > 1 ? 's' : ''}',
+                style: FontTokens.label.copyWith(color: ColorTokens.statusSuccess, fontWeight: FontWeight.bold, fontSize: 10),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: payments.length,
+          separatorBuilder: (context, idx) => const SizedBox(height: 8),
+          itemBuilder: (context, idx) {
+            final p = payments[idx];
+            final dateStr = df.format(p.paymentDate);
+            final hasReceipt = p.receiptImageUrl != null && p.receiptImageUrl!.trim().isNotEmpty;
+            final isCash = p.paymentMethod.toLowerCase().contains('efectivo');
+
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: ColorTokens.lightBorderSubtle),
+                boxShadow: BorderShadowTokens.shadowClayCard,
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 18,
+                    backgroundColor: isCash ? ColorTokens.statusSuccess.withAlpha(20) : ColorTokens.lightBrandSecondary.withAlpha(20),
+                    child: Icon(
+                      isCash ? Icons.payments_outlined : Icons.account_balance_outlined,
+                      size: 18,
+                      color: isCash ? ColorTokens.statusSuccess : ColorTokens.lightBrandSecondary,
                     ),
-                    const SizedBox(width: 12),
-                    // Información central: Fecha, Hora y Cuota
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Cuota #${inst.quotaNumber} · ${CurrencyUtils.format(inst.paidAmount > 0 ? inst.paidAmount : inst.quotaValue)}',
-                            style: FontTokens.bodyMedium.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: ColorTokens.lightTextPrimary,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              '+${CurrencyUtils.format(p.amount)}',
+                              style: FontTokens.bodyMedium.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: ColorTokens.statusSuccess,
+                              ),
                             ),
-                          ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: isCash ? ColorTokens.statusSuccess.withAlpha(20) : ColorTokens.lightBrandSecondary.withAlpha(20),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                p.paymentMethod.toUpperCase(),
+                                style: FontTokens.label.copyWith(
+                                  fontSize: 8.5,
+                                  color: isCash ? ColorTokens.statusSuccess : ColorTokens.lightBrandSecondary,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          dateStr,
+                          style: FontTokens.bodySmall.copyWith(fontSize: 10.5, color: ColorTokens.lightTextSecondary),
+                        ),
+                        if (p.notes.isNotEmpty) ...[
                           const SizedBox(height: 2),
                           Text(
-                            dateStr,
-                            style: FontTokens.bodySmall.copyWith(
-                              fontSize: 11,
-                              color: ColorTokens.lightTextSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            (inst.paymentMethod.isNotEmpty ? inst.paymentMethod : 'TRANSFERENCIA').toUpperCase(),
-                            style: FontTokens.label.copyWith(
-                              fontSize: 9,
-                              color: ColorTokens.lightBrandPrimary,
-                              fontWeight: FontWeight.bold,
-                            ),
+                            p.notes,
+                            style: FontTokens.bodySmall.copyWith(fontSize: 11, fontStyle: FontStyle.italic, color: ColorTokens.lightTextPrimary),
                           ),
                         ],
-                      ),
+                      ],
                     ),
-                    // Ícono Ojo en la derecha para ver imagen completa
+                  ),
+                  if (hasReceipt)
                     IconButton(
-                      icon: const Icon(Icons.visibility, color: ColorTokens.lightBrandPrimary, size: 22),
-                      tooltip: 'Ver comprobante completo',
-                      onPressed: () => ImageViewerModal.show(context, imageUrl: clean, title: 'Comprobante Cuota #${inst.quotaNumber}'),
+                      icon: const Icon(Icons.receipt_long_outlined, color: ColorTokens.lightBrandPrimary, size: 22),
+                      tooltip: 'Ver comprobante',
+                      onPressed: () => ImageViewerModal.show(context, imageUrl: p.receiptImageUrl!.trim(), title: 'Comprobante de Abono · ${CurrencyUtils.format(p.amount)}'),
                     ),
-                  ],
-                ),
-              );
-            },
-          ),
+                ],
+              ),
+            );
+          },
+        ),
       ],
     );
   }
@@ -1282,7 +1362,7 @@ class CreditDetailScreen extends ConsumerWidget {
 
 class _RegisterPaymentSheet extends StatefulWidget {
   final Credit credit;
-  final ValueChanged<Credit> onSave;
+  final Function(CreditPayment payment, Credit updatedCredit) onSave;
 
   const _RegisterPaymentSheet({required this.credit, required this.onSave});
 
@@ -1305,8 +1385,9 @@ class _RegisterPaymentSheetState extends State<_RegisterPaymentSheet> {
     _selectedQuotaIdx = widget.credit.installments.indexWhere((i) => i.status != 'pagado');
     if (_selectedQuotaIdx < 0) _selectedQuotaIdx = 0;
     
-    final initialQuotaValue = widget.credit.installments[_selectedQuotaIdx].quotaValue;
-    _amountCtrl = TextEditingController(text: initialQuotaValue.toInt().toString());
+    final targetInst = widget.credit.installments[_selectedQuotaIdx];
+    final pendingQuota = (targetInst.quotaValue - targetInst.paidAmount).clamp(0.0, double.infinity);
+    _amountCtrl = TextEditingController(text: pendingQuota.toInt().toString());
     _notesCtrl = TextEditingController();
     _selectedPaymentDate = DateTime.now();
   }
@@ -1323,26 +1404,26 @@ class _RegisterPaymentSheetState extends State<_RegisterPaymentSheet> {
   void _submitPayment() async {
     if (_isSubmitting) return;
     final amount = double.tryParse(_amountCtrl.text) ?? 0;
-    if (amount <= 0 || _selectedQuotaIdx < 0) return;
+    if (amount <= 0) return;
 
     setState(() {
       _isSubmitting = true;
     });
 
     try {
-      final updatedInstallments = List<CreditInstallment>.from(widget.credit.installments);
-      final targetInst = updatedInstallments[_selectedQuotaIdx];
-
-      updatedInstallments[_selectedQuotaIdx] = targetInst.copyWith(
-        paidAmount: targetInst.paidAmount + amount,
-        paidDate: _selectedPaymentDate,
+      final String paymentId = 'pay_${DateTime.now().millisecondsSinceEpoch}';
+      final newPayment = CreditPayment(
+        id: paymentId,
+        creditId: widget.credit.id,
+        amount: amount,
+        paymentDate: _selectedPaymentDate,
         paymentMethod: _paymentMethod,
         notes: _notesCtrl.text.trim(),
         receiptImageUrl: _paymentMethod == 'transferencia' ? _receiptImageUrl : null,
       );
 
-      final updatedCredit = widget.credit.copyWith(installments: updatedInstallments);
-      widget.onSave(updatedCredit);
+      final updatedCredit = widget.credit.addPayment(newPayment);
+      widget.onSave(newPayment, updatedCredit);
     } catch (_) {
       if (mounted) {
         setState(() {
@@ -1380,7 +1461,7 @@ class _RegisterPaymentSheetState extends State<_RegisterPaymentSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('SELECCIONA LA CUOTA A PAGAR', style: FontTokens.label),
+          Text('SELECCIONA LA CUOTA A ABONAR', style: FontTokens.label),
           const SizedBox(height: 8),
           
           // List of Unpaid Installment Buttons
@@ -1391,13 +1472,15 @@ class _RegisterPaymentSheetState extends State<_RegisterPaymentSheet> {
               if (inst.status == 'pagado') return const SizedBox();
 
               final isSelected = _selectedQuotaIdx == idx;
+              final pendingQuota = (inst.quotaValue - inst.paidAmount).clamp(0.0, double.infinity);
+
               return Padding(
                 padding: const EdgeInsets.only(bottom: 6),
                 child: InkWell(
                   onTap: () {
                     setState(() {
                       _selectedQuotaIdx = idx;
-                      _amountCtrl.text = inst.quotaValue.toInt().toString();
+                      _amountCtrl.text = pendingQuota.toInt().toString();
                     });
                   },
                   borderRadius: BorderRadius.circular(10),
@@ -1421,7 +1504,7 @@ class _RegisterPaymentSheetState extends State<_RegisterPaymentSheet> {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            Text(currencyFmt.format(inst.quotaValue), style: FontTokens.moneySmall),
+                            Text('Pendiente: ${currencyFmt.format(pendingQuota)}', style: FontTokens.moneySmall.copyWith(color: isSelected ? ColorTokens.lightBrandPrimary : ColorTokens.lightTextPrimary, fontWeight: FontWeight.bold)),
                             const SizedBox(height: 2),
                             InstStatusBadge(status: inst.status),
                           ],
@@ -1432,6 +1515,47 @@ class _RegisterPaymentSheetState extends State<_RegisterPaymentSheet> {
                 ),
               );
             }).toList(),
+          ),
+
+          const SizedBox(height: 14),
+
+          // Botones rápidos de monto
+          Row(
+            children: [
+              if (_selectedQuotaIdx < widget.credit.installments.length) ...[
+                () {
+                  final cur = widget.credit.installments[_selectedQuotaIdx];
+                  final pend = (cur.quotaValue - cur.paidAmount).clamp(0.0, double.infinity);
+                  return Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => setState(() => _amountCtrl.text = pend.toInt().toString()),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      child: Text(
+                        'Cuota (${currencyFmt.format(pend)})',
+                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  );
+                }(),
+                const SizedBox(width: 8),
+              ],
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => setState(() => _amountCtrl.text = widget.credit.pendingBalance.toInt().toString()),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: Text(
+                    'Saldo Total (${currencyFmt.format(widget.credit.pendingBalance)})',
+                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: ColorTokens.statusSuccess),
+                  ),
+                ),
+              ),
+            ],
           ),
 
           const SizedBox(height: 14),

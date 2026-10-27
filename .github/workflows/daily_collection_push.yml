@@ -1,0 +1,35 @@
+name: Cobranza Diaria Automática (Push Notifications)
+
+on:
+  schedule:
+    # 8:00 AM Colombia (UTC-5) -> 13:00 UTC
+    - cron: '0 13 * * *'
+  workflow_dispatch: # Permite ejecutar manualmente desde GitHub con un clic
+
+jobs:
+  send-collection-notifications:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: server/package-lock.json
+
+      - name: Instalar dependencias del servidor
+        run: npm ci
+
+      - name: Ejecutar revisión y envío automático de notificaciones
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://kpgkoltwzorznfshwwiv.supabase.co' }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node cron_job.js

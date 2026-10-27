@@ -52,11 +52,22 @@ class OfflineFirstCashShiftRepository {
     }
 
     for (final c in credits) {
-      for (final inst in c.installments) {
-        if (inst.paidDate != null && (inst.paidDate!.isAfter(localShift.openedAt) || inst.paidDate!.isAtSameMomentAs(localShift.openedAt))) {
-          final pm = inst.paymentMethod.toLowerCase();
-          if (pm.contains('efectivo')) {
-            computedCashCredits += inst.paidAmount;
+      if (c.payments.isNotEmpty) {
+        for (final p in c.payments) {
+          if (p.paymentDate.isAfter(localShift.openedAt) || p.paymentDate.isAtSameMomentAs(localShift.openedAt)) {
+            final pm = p.paymentMethod.toLowerCase();
+            if (pm.contains('efectivo')) {
+              computedCashCredits += p.amount;
+            }
+          }
+        }
+      } else {
+        for (final inst in c.installments) {
+          if (inst.paidDate != null && (inst.paidDate!.isAfter(localShift.openedAt) || inst.paidDate!.isAtSameMomentAs(localShift.openedAt))) {
+            final pm = inst.paymentMethod.toLowerCase();
+            if (pm.contains('efectivo')) {
+              computedCashCredits += inst.paidAmount;
+            }
           }
         }
       }

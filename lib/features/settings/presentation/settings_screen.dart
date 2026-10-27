@@ -362,16 +362,28 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               onPressed: () async {
                                 final client = Supabase.instance.client;
                                 final uid = client.auth.currentUser?.id;
-                                if (uid != null) {
-                                  await PushNotificationService().syncDeviceToken(uid);
-                                  if (ctx.mounted) {
-                                    ScaffoldMessenger.of(ctx).showSnackBar(
-                                      const SnackBar(content: Text('Token resincronizado con Supabase ✅')),
-                                    );
-                                  }
+                                await PushNotificationService().syncDeviceToken(uid ?? '');
+                                if (ctx.mounted) {
+                                  ScaffoldMessenger.of(ctx).showSnackBar(
+                                    const SnackBar(content: Text('Token sincronizado con Supabase ✅')),
+                                  );
                                 }
                               },
                               child: const Text('Re-sincronizar'),
+                            ),
+                            ElevatedButton.icon(
+                              onPressed: () async {
+                                await PushNotificationService().sendCollectionPushNotification(
+                                  title: '🧪 Prueba Push · Alfa Gama Store',
+                                  body: '¡Excelente! Tu dispositivo recibe las alertas y notificaciones push sin problemas.',
+                                );
+                              },
+                              icon: const Icon(Icons.send, size: 14, color: Colors.white),
+                              label: const Text('Probar Alerta', style: TextStyle(color: Colors.white, fontSize: 12)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: ColorTokens.lightBrandPrimary,
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              ),
                             ),
                             TextButton(
                               onPressed: () => Navigator.pop(ctx),

@@ -40,7 +40,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     });
 
     final error = await ref.read(authProvider.notifier).login(
-      _usernameController.text,
+      _usernameController.text.trim(),
       _passwordController.text,
     );
 
@@ -98,10 +98,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     controller: _usernameController,
                     label: 'Correo Electrónico',
                     hint: 'usuario@alfagamastore.com',
+                    keyboardType: TextInputType.emailAddress,
                     prefixIcon: const Icon(Icons.email_outlined, size: 20, color: textMuted),
                     validator: (val) {
                       if (val == null || val.trim().isEmpty) {
                         return 'El correo es requerido';
+                      }
+                      if (!val.trim().contains('@')) {
+                        return 'Ingresa un correo electrónico válido';
                       }
                       return null;
                     },
@@ -118,28 +122,48 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       return null;
                     },
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 20),
 
                   if (_errorMessage != null) ...[
                     Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
                         color: ColorTokens.statusDangerDim,
-                        border: Border.all(color: ColorTokens.statusDanger),
+                        border: Border.all(color: ColorTokens.statusDanger.withAlpha(120), width: 1.2),
                         borderRadius: BorderRadius.circular(BorderShadowTokens.radiusMD),
                       ),
-                      child: Row(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.error_outline, color: ColorTokens.statusDanger, size: 20),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              _errorMessage!,
-                              style: FontTokens.bodyMedium.copyWith(
-                                color: ColorTokens.statusDanger,
-                                fontWeight: FontWeight.bold,
+                          Row(
+                            children: [
+                              const Icon(Icons.error_outline, color: ColorTokens.statusDanger, size: 20),
+                              const SizedBox(width: 8),
+                              const Expanded(
+                                child: Text(
+                                  'Aviso de Inicio de Sesión',
+                                  style: TextStyle(
+                                    color: ColorTokens.statusDanger,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
                               ),
+                              IconButton(
+                                icon: const Icon(Icons.close, size: 16, color: ColorTokens.statusDanger),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                                onPressed: () => setState(() => _errorMessage = null),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            _errorMessage!,
+                            style: FontTokens.bodySmall.copyWith(
+                              color: ColorTokens.lightTextPrimary,
+                              height: 1.35,
                             ),
                           ),
                         ],

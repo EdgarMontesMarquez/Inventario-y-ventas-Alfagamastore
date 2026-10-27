@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
-import type { Credit, Customer, CreditInstallment, CreditCharge } from './types/index';
+import type { Credit, Customer, CreditInstallment, CreditCharge, CreditPayment } from './types/index';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { 
@@ -17,7 +17,8 @@ import {
   Clock,
   Sparkles,
   ExternalLink,
-  UserCheck
+  UserCheck,
+  History
 } from 'lucide-react';
 
 function exportCustomerCreditToPDF(credit: Credit) {
@@ -171,17 +172,11 @@ function exportCustomerCreditToPDF(credit: Credit) {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor(13, 26, 51);
-  doc.text('PLAN DE PAGOS (DETALLE DE CUOTAS)', 15, 137);
-
-  let runningBal = credit.total_amount;
-  const rows = (credit.installments || []).map(inst => {
-    runningBal -= inst.paid_amount;
-    return { inst, balance: Math.max(0, runningBal) };
-  });
+  doc.text('PLAN DE PAGOS (AMORTIZACIÓN DE CUOTAS)', 15, 137);
 
   const getStatusText = (inst: any) => {
-    if (inst.is_paid || inst.paid_amount >= inst.amount) return 'PAGADO';
-    if (inst.paid_amount > 0) return 'PARCIAL';
+    if (inst.is_paid || (inst.paid_amount || 0) >= inst.amount) return 'PAGADO';
+    if ((inst.paid_amount || 0) > 0) return 'PARCIAL';
     if (inst.due_date) {
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
@@ -195,16 +190,19 @@ function exportCustomerCreditToPDF(credit: Credit) {
   autoTable(doc, {
     startY: 140,
     margin: { left: 15, right: 15 },
-    head: [['N°', 'Vencimiento', 'Cuota', 'Abono', 'Saldo', 'Estado', 'Método/Obs.']],
-    body: rows.map(r => [
-      r.inst.number.toString(),
-      fmtD(r.inst.due_date),
-      fmtC(r.inst.amount),
-      r.inst.paid_amount > 0 ? fmtC(r.inst.paid_amount) : '-',
-      fmtC(r.balance),
-      getStatusText(r.inst),
-      r.inst.payment_method || r.inst.notes || '-'
-    ]),
+    head: [['N°', 'Vencimiento', 'Valor Cuota', 'Abonado', 'Saldo Cuota', 'Estado', 'Método / Obs.']],
+    body: (credit.installments || []).map(inst => {
+      const quotaRemaining = Math.max(0, inst.amount - (inst.paid_amount || 0));
+      return [
+        inst.number.toString(),
+        fmtD(inst.due_date),
+        fmtC(inst.amount),
+        (inst.paid_amount || 0) > 0 ? fmtC(inst.paid_amount) : '-',
+        fmtC(quotaRemaining),
+        getStatusText(inst),
+        inst.receipt_image_url ? 'Comprobante adjunto' : (inst.payment_method || inst.notes || '-')
+      ];
+    }),
     styles: {
       font: 'helvetica',
       fontSize: 8,
@@ -230,6 +228,42 @@ function exportCustomerCreditToPDF(credit: Credit) {
   });
 
   let finalY = (doc as any).lastAutoTable.finalY || 140;
+
+  // Historial de Abonos Recibidos
+  if (credit.payments && credit.payments.length > 0) {
+    let paymentsStartY = finalY + 8;
+    if (paymentsStartY + 30 > 280) {
+      doc.addPage();
+      paymentsStartY = 15;
+    }
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(13, 26, 51);
+    doc.text('HISTORIAL DE ABONOS RECIBIDOS', 15, paymentsStartY);
+
+    autoTable(doc, {
+      startY: paymentsStartY + 3,
+      margin: { left: 15, right: 15 },
+      head: [['Fecha', 'Monto Abonado', 'Método de Pago', 'Notas / Comprobante']],
+      body: credit.payments.map((pmt, pIdx) => [
+        fmtD(pmt.created_at || (pmt as any).payment_date),
+        fmtC(pmt.amount),
+        (pmt.payment_method || 'Efectivo').toUpperCase(),
+        pmt.receipt_image_url ? `${pmt.notes || `Abono #${pIdx + 1}`} (Comprobante registrado)` : (pmt.notes || `Abono #${pIdx + 1}`)
+      ]),
+      styles: { font: 'helvetica', fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [0, 102, 255], textColor: [255, 255, 255], fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [248, 249, 250] },
+      columnStyles: {
+        0: { cellWidth: 28 },
+        1: { cellWidth: 32 },
+        2: { cellWidth: 35 },
+        3: { cellWidth: 'auto' }
+      }
+    });
+
+    finalY = (doc as any).lastAutoTable.finalY || finalY;
+  }
 
   if (credit.charges && credit.charges.length > 0) {
     let chargesStartY = finalY + 8;
@@ -417,7 +451,7 @@ export function App() {
         return;
       }
 
-      // 3. Cargar Cuotas (Installments) y Cargos Extras para cada crédito
+      // 3. Cargar Cuotas (Installments), Cargos Extras y Abonos (Payments) para cada crédito
       const fullCredits: Credit[] = await Promise.all(
         rawCredits.map(async (c: any) => {
           let instList: any[] = [];
@@ -440,8 +474,62 @@ export function App() {
             if (chargeData) chargeList = chargeData;
           } catch (_) {}
 
+          let paymentList: any[] = [];
+          try {
+            const { data: paymentData } = await supabase
+              .from('credit_payments')
+              .select('*')
+              .eq('credit_id', c.id)
+              .order('payment_date', { ascending: false });
+            if (paymentData) paymentList = paymentData;
+          } catch (_) {}
+
           const totalAmt = Number(c.total_amount || 0);
-          const paidAmt = Number(c.paid_amount || 0);
+
+          const parsedPayments: CreditPayment[] = paymentList.map((p: any) => {
+            const pDate = p.payment_date || p.created_at || new Date().toISOString();
+            return {
+              id: String(p.id),
+              credit_id: String(p.credit_id),
+              amount: Number(p.amount || 0),
+              payment_date: pDate,
+              payment_method: p.payment_method || 'efectivo',
+              notes: p.notes,
+              receipt_image_url: p.receipt_image_url,
+              created_at: p.created_at || pDate
+            };
+          });
+
+          const rawTotalPaidFromPayments = parsedPayments.reduce((sum, p) => sum + p.amount, 0);
+          const paidAmt = parsedPayments.length > 0 ? rawTotalPaidFromPayments : Number(c.paid_amount || 0);
+
+          let parsedInstallments: CreditInstallment[] = instList.map((inst: any) => ({
+            id: String(inst.id),
+            credit_id: String(inst.credit_id),
+            number: Number(inst.number || 1),
+            amount: Number(inst.amount || 0),
+            paid_amount: Number(inst.paid_amount || 0),
+            due_date: inst.due_date,
+            is_paid: Boolean(inst.is_paid),
+            paid_at: inst.paid_at,
+            payment_method: inst.payment_method,
+            notes: inst.notes,
+            receipt_image_url: inst.receipt_image_url
+          })).sort((a, b) => a.number - b.number);
+
+          if (parsedPayments.length > 0) {
+            let remaining = paidAmt;
+            parsedInstallments = parsedInstallments.map(inst => {
+              const quotaVal = inst.amount;
+              const paidForThis = Math.min(quotaVal, Math.max(0, remaining));
+              remaining -= paidForThis;
+              return {
+                ...inst,
+                paid_amount: paidForThis,
+                is_paid: paidForThis >= quotaVal && quotaVal > 0
+              };
+            });
+          }
 
           return {
             id: String(c.id),
@@ -460,19 +548,8 @@ export function App() {
             due_date: c.due_date || new Date().toISOString(),
             notes: c.notes,
             created_at: c.created_at || new Date().toISOString(),
-            installments: instList.map((inst: any) => ({
-              id: String(inst.id),
-              credit_id: String(inst.credit_id),
-              number: Number(inst.number || 1),
-              amount: Number(inst.amount || 0),
-              paid_amount: Number(inst.paid_amount || 0),
-              due_date: inst.due_date,
-              is_paid: Boolean(inst.is_paid),
-              paid_at: inst.paid_at,
-              payment_method: inst.payment_method,
-              notes: inst.notes,
-              receipt_image_url: inst.receipt_image_url
-            })).sort((a, b) => a.number - b.number),
+            installments: parsedInstallments,
+            payments: parsedPayments,
             charges: chargeList.map((ch: any) => ({
               id: String(ch.id),
               credit_id: String(ch.credit_id),
@@ -801,7 +878,9 @@ export function App() {
                               <tr className="bg-[#F4F7FF] border-b border-slate-200 text-[#475569] font-bold uppercase tracking-wider">
                                 <th className="py-3 px-3.5">Cuota #</th>
                                 <th className="py-3 px-3.5">Vencimiento</th>
-                                <th className="py-3 px-3.5">Monto Cuota</th>
+                                <th className="py-3 px-3.5">Valor Cuota</th>
+                                <th className="py-3 px-3.5">Abonado</th>
+                                <th className="py-3 px-3.5">Saldo Cuota</th>
                                 <th className="py-3 px-3.5">Estado</th>
                                 <th className="py-3 px-3.5 text-right">Comprobante</th>
                               </tr>
@@ -809,6 +888,9 @@ export function App() {
                             <tbody className="divide-y divide-slate-100 bg-white">
                               {credit.installments.map((inst: CreditInstallment) => {
                                 const hasReceipt = Boolean(inst.receipt_image_url && inst.receipt_image_url.trim().length > 0);
+                                const quotaBal = Math.max(0, inst.amount - (inst.paid_amount || 0));
+                                const isInstPaid = inst.is_paid || (inst.paid_amount || 0) >= inst.amount;
+                                const isPartial = (inst.paid_amount || 0) > 0 && !isInstPaid;
 
                                 return (
                                   <tr key={inst.id} className="hover:bg-[#F4F7FF]/60 transition-colors">
@@ -817,7 +899,7 @@ export function App() {
                                     </td>
                                     <td className="py-3 px-3.5 text-[#475569] font-medium">
                                       <div>{formatDate(inst.due_date)}</div>
-                                      {inst.paid_at && (inst.is_paid || (inst.paid_amount && inst.paid_amount > 0)) && (
+                                      {inst.paid_at && (isInstPaid || isPartial) && (
                                         <div className="text-[10px] font-semibold text-[#047857]">
                                           Pagó: {formatDate(inst.paid_at)}
                                         </div>
@@ -826,10 +908,20 @@ export function App() {
                                     <td className="py-3 px-3.5 font-extrabold text-[#0A192F] font-mono-finance">
                                       {formatCurrency(inst.amount)}
                                     </td>
+                                    <td className="py-3 px-3.5 font-bold text-[#10B981] font-mono-finance">
+                                      {(inst.paid_amount || 0) > 0 ? formatCurrency(inst.paid_amount || 0) : '-'}
+                                    </td>
+                                    <td className="py-3 px-3.5 font-extrabold font-mono-finance text-[#0066FF]">
+                                      {formatCurrency(quotaBal)}
+                                    </td>
                                     <td className="py-3 px-3.5">
-                                      {inst.is_paid || isPaidFull ? (
+                                      {isInstPaid || isPaidFull ? (
                                         <span className="inline-flex items-center gap-1 font-extrabold text-[#047857] bg-[#E6F7F0] px-2.5 py-0.5 rounded-md border border-[#A7F3D0] text-[11px]">
                                           <CheckCircle2 className="w-3 h-3" /> Pagado
+                                        </span>
+                                      ) : isPartial ? (
+                                        <span className="inline-flex items-center gap-1 font-extrabold text-[#D97706] bg-[#FEF3C7] px-2.5 py-0.5 rounded-md border border-[#FDE68A] text-[11px]">
+                                          Parcial
                                         </span>
                                       ) : (
                                         <span className="inline-flex items-center gap-1 font-extrabold text-[#B91C1C] bg-[#FEE2E2] px-2.5 py-0.5 rounded-md border border-[#FECACA] text-[11px]">
@@ -860,6 +952,79 @@ export function App() {
                               })}
                             </tbody>
                           </table>
+                        </div>
+                      )}
+
+                      {/* Historial de Abonos Registrados */}
+                      {credit.payments && credit.payments.length > 0 && (
+                        <div className="mt-6 pt-5 border-t border-slate-100">
+                          <h4 className="font-heading font-bold text-sm text-[#0A192F] mb-3 flex items-center justify-between">
+                            <span className="flex items-center gap-2">
+                              <History className="w-4 h-4 text-[#0066FF]" />
+                              Historial de Abonos Registrados ({credit.payments.length})
+                            </span>
+                            <span className="text-xs font-bold text-[#10B981] font-mono-finance">
+                              Total Abonado: {formatCurrency(credit.paid_amount)}
+                            </span>
+                          </h4>
+
+                          <div className="overflow-x-auto rounded-xl border border-slate-200/80">
+                            <table className="w-full text-left text-xs border-collapse min-w-125">
+                              <thead>
+                                <tr className="bg-[#F4F7FF] border-b border-slate-200 text-[#475569] font-bold uppercase tracking-wider">
+                                  <th className="py-3 px-3.5">#</th>
+                                  <th className="py-3 px-3.5">Fecha Abono</th>
+                                  <th className="py-3 px-3.5">Monto Recibido</th>
+                                  <th className="py-3 px-3.5">Método de Pago</th>
+                                  <th className="py-3 px-3.5">Detalle / Notas</th>
+                                  <th className="py-3 px-3.5 text-right">Comprobante</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100 bg-white">
+                                {credit.payments.map((pmt, pIdx) => {
+                                  const hasReceipt = Boolean(pmt.receipt_image_url && pmt.receipt_image_url.trim().length > 0);
+                                  return (
+                                    <tr key={pmt.id || pIdx} className="hover:bg-[#F4F7FF]/60 transition-colors">
+                                      <td className="py-3 px-3.5 font-bold text-[#0A192F]">
+                                        #{credit.payments!.length - pIdx}
+                                      </td>
+                                      <td className="py-3 px-3.5 text-[#475569] font-medium">
+                                        {formatDate(pmt.created_at || (pmt as any).payment_date)}
+                                      </td>
+                                      <td className="py-3 px-3.5 font-extrabold text-[#10B981] font-mono-finance">
+                                        {formatCurrency(pmt.amount)}
+                                      </td>
+                                      <td className="py-3 px-3.5 font-semibold text-[#0A192F]">
+                                        <span className="capitalize px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-[11px]">
+                                          {pmt.payment_method || 'Efectivo'}
+                                        </span>
+                                      </td>
+                                      <td className="py-3 px-3.5 text-[#475569]">
+                                        {pmt.notes || 'Abono registrado'}
+                                      </td>
+                                      <td className="py-3 px-3.5 text-right">
+                                        {hasReceipt ? (
+                                          <button
+                                            type="button"
+                                            onClick={() => setSelectedImage({
+                                              url: pmt.receipt_image_url!.trim(),
+                                              title: `Comprobante Abono #${credit.payments!.length - pIdx} - ${customer?.name || credit.customer_name}`
+                                            })}
+                                            className="inline-flex items-center gap-1.5 bg-[#E6F0FF] hover:bg-[#BFDBFE] text-[#0066FF] font-bold px-3 py-1.5 rounded-lg transition-colors border border-[#BFDBFE] text-xs cursor-pointer active:scale-95"
+                                          >
+                                            <Eye className="w-3.5 h-3.5" />
+                                            <span>Ver Foto</span>
+                                          </button>
+                                        ) : (
+                                          <span className="text-slate-400 text-[11px]">-</span>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
                         </div>
                       )}
 

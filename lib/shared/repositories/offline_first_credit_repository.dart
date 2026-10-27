@@ -214,4 +214,50 @@ class OfflineFirstCreditRepository implements CreditRepository {
       ));
     }
   }
+
+  @override
+  Future<void> addPayment(String creditId, CreditPayment payment, Credit updatedCredit) async {
+    // 1. Guardar de inmediato en local
+    await _storage.saveOrUpdateCredit(updatedCredit);
+
+    // 2. Subir a Supabase o encolar
+    bool synced = false;
+    if (_connectivity.isOnline) {
+      try {
+        await _remoteRepo.addPayment(creditId, payment, updatedCredit);
+        synced = true;
+      } catch (e) {
+        debugPrint('⚠️ Error registrando abono en Supabase: $e');
+      }
+    }
+
+    if (!synced) {
+      await _queue.enqueue(SyncAction(
+        id: const Uuid().v4(),
+        type: 'ADD_CREDIT_PAYMENT',
+        payload: {
+          'credit_id': creditId,
+          'payment': {
+            'amount': payment.amount,
+            'payment_date': payment.paymentDate.toUtc().toIso8601String(),
+            'payment_method': payment.paymentMethod,
+            'receipt_image_url': payment.receiptImageUrl,
+            'notes': payment.notes,
+            'shift_id': payment.shiftId,
+          },
+          'updated_credit': {
+            'customer_name': updatedCredit.clientName,
+            'customer_phone': updatedCredit.clientPhone,
+            'customer_address': updatedCredit.clientAddress,
+            'products': updatedCredit.products,
+            'total_amount': updatedCredit.totalSale,
+            'paid_amount': updatedCredit.totalPaid,
+            'status': updatedCredit.status,
+            'notes': updatedCredit.generalNotes,
+          },
+        },
+        createdAt: DateTime.now(),
+      ));
+    }
+  }
 }

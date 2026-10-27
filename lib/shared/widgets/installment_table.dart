@@ -75,18 +75,18 @@ class InstallmentTable extends StatelessWidget {
               headingTextStyle: FontTokens.bodySmall.copyWith(color: textMuted, fontWeight: FontWeight.bold),
               columns: const [
                 DataColumn(label: Text('N°')),
-                DataColumn(label: Text('Fecha')),
-                DataColumn(label: Text('Cuota')),
-                DataColumn(label: Text('Abono')),
-                DataColumn(label: Text('Saldo')),
+                DataColumn(label: Text('Vencimiento')),
+                DataColumn(label: Text('Valor Cuota')),
+                DataColumn(label: Text('Abonado')),
+                DataColumn(label: Text('Saldo Cuota')),
                 DataColumn(label: Text('Estado')),
-                DataColumn(label: Text('Obs.')),
               ],
               rows: List.generate(rows.length, (index) {
                 final row = rows[index];
                 final inst = row.inst;
                 final s = isCreditFullyPaid ? 'pagado' : inst.status;
                 final isEven = index % 2 == 0;
+                final quotaBalance = (inst.quotaValue - inst.paidAmount).clamp(0.0, double.infinity);
 
                 final rowColor = isEven
                     ? cardBg
@@ -107,27 +107,12 @@ class InstallmentTable extends StatelessWidget {
                       ),
                     ),
                     DataCell(
-                      Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            dateFmt.format(inst.dueDate),
-                            style: textStyle.copyWith(
-                              color: s == 'vencido' ? ColorTokens.statusDanger : textMuted,
-                              fontSize: 11,
-                            ),
-                          ),
-                          if (inst.paidDate != null && inst.paidAmount > 0)
-                            Text(
-                              'Pagó: ${dateFmt.format(inst.paidDate!)}',
-                              style: textStyle.copyWith(
-                                color: ColorTokens.statusSuccess,
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                        ],
+                      Text(
+                        dateFmt.format(inst.dueDate),
+                        style: textStyle.copyWith(
+                          color: s == 'vencido' ? ColorTokens.statusDanger : textMuted,
+                          fontSize: 11,
+                        ),
                       ),
                     ),
                     DataCell(
@@ -141,24 +126,20 @@ class InstallmentTable extends StatelessWidget {
                         inst.paidAmount > 0 ? CurrencyUtils.format(inst.paidAmount) : '—',
                         style: textStyle.copyWith(
                           color: inst.paidAmount > 0 ? ColorTokens.statusSuccess : textMuted,
+                          fontWeight: inst.paidAmount > 0 ? FontWeight.bold : FontWeight.normal,
                         ),
                       ),
                     ),
                     DataCell(
                       Text(
-                        CurrencyUtils.format(row.balance),
+                        CurrencyUtils.format(quotaBalance),
                         style: textStyle.copyWith(
-                          color: row.balance > 0 ? ColorTokens.statusDanger : ColorTokens.statusSuccess,
+                          color: quotaBalance > 0 ? (s == 'vencido' ? ColorTokens.statusDanger : textMuted) : ColorTokens.statusSuccess,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                     ),
                     DataCell(InstStatusBadge(status: s)),
-                    DataCell(
-                      Text(
-                        inst.paymentMethod.isNotEmpty ? inst.paymentMethod : '—',
-                        style: textStyle.copyWith(color: textMuted, fontSize: 11),
-                      ),
-                    ),
                   ],
                 );
               }),

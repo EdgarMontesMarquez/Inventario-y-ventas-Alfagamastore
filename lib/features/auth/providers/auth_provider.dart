@@ -101,14 +101,27 @@ class AuthNotifier extends Notifier<AuthStateData> {
 
   /// Inicia sesión exclusivamente con Supabase Auth (Backend Online)
   Future<String?> login(String email, String password) async {
+    final cleanEmail = email.trim();
+    final cleanPassword = password.trim();
+
+    if (cleanEmail.isEmpty) {
+      return 'Por favor ingresa tu correo electrónico.';
+    }
+    if (!cleanEmail.contains('@') || !cleanEmail.contains('.')) {
+      return 'El formato del correo electrónico no es válido (ej: usuario@alfagamastore.com).';
+    }
+    if (cleanPassword.isEmpty) {
+      return 'Por favor ingresa tu contraseña.';
+    }
+
     try {
       final res = await Supabase.instance.client.auth.signInWithPassword(
-        email: email.trim(),
-        password: password,
+        email: cleanEmail,
+        password: password, // Mantener contraseña original por si incluye caracteres especiales
       );
 
       if (res.user != null) {
-        final emailStr = res.user!.email ?? email;
+        final emailStr = res.user!.email ?? cleanEmail;
         final nameMeta = (res.user!.userMetadata?['full_name'] as String?) ??
             (emailStr.contains('@') ? emailStr.split('@')[0] : 'Usuario');
         final roleMeta = (res.user!.userMetadata?['role'] as String?) ?? 'empleado';
@@ -122,12 +135,45 @@ class AuthNotifier extends Notifier<AuthStateData> {
         return null; // Éxito
       }
     } on AuthException catch (e) {
-      return e.message;
+      final msg = e.message.toLowerCase();
+      final code = e.code?.toLowerCase() ?? '';
+
+      if (code == 'invalid_credentials' ||
+          msg.contains('invalid login credentials') ||
+          msg.contains('invalid credentials')) {
+        return 'Credenciales incorrectas:\n'
+            '• Verifica que el correo esté bien escrito ($cleanEmail).\n'
+            '• Revisa mayúsculas y minúsculas en tu contraseña.\n'
+            '• Si es un usuario nuevo, asegúrate de haber confirmado el enlace enviado a tu correo.';
+      }
+      if (code == 'email_not_confirmed' || msg.contains('email not confirmed')) {
+        return 'Correo no confirmado: Esta cuenta requiere verificación previa.\n\n'
+            'Revisa tu bandeja de entrada (o carpeta de spam) de "$cleanEmail" y haz clic en el enlace para activar tu cuenta.';
+      }
+      if (code == 'over_request_rate_limit' || e.statusCode == '429' || msg.contains('rate limit')) {
+        return 'Demasiados intentos de acceso: Por seguridad del sistema, espera 60 segundos antes de volver a intentar.';
+      }
+      if (code == 'user_not_found' || msg.contains('user not found')) {
+        return 'Usuario no encontrado: No existe una cuenta registrada con el correo "$cleanEmail".\n\n'
+            'Verifica el correo o solicita a tu administrador que cree tu usuario en el sistema.';
+      }
+      if (msg.contains('user banned') || msg.contains('disabled')) {
+        return 'Acceso denegado: Esta cuenta ha sido suspendida o deshabilitada.';
+      }
+      return 'Error de acceso (${e.code ?? 'auth'}): ${e.message}';
     } catch (e) {
+      final errStr = e.toString().toLowerCase();
+      if (errStr.contains('socketexception') ||
+          errStr.contains('clientexception') ||
+          errStr.contains('timeout') ||
+          errStr.contains('network') ||
+          errStr.contains('connection')) {
+        return 'Sin conexión al servidor: No se pudo conectar a Supabase.\n\nVerifica tu conexión a internet (WiFi o datos móviles).';
+      }
       return 'Error de conexión con Supabase Auth: ${e.toString()}';
     }
 
-    return 'Correo o contraseña incorrectos';
+    return 'Correo o contraseña incorrectos. Verifica tus datos de acceso.';
   }
 
   /// Cierra la sesión activa en Supabase Auth y destruye el token en disco

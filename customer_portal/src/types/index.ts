@@ -32,6 +32,18 @@ export interface CreditCharge {
   notes?: string;
 }
 
+export interface CreditPayment {
+  id: string;
+  credit_id: string;
+  amount: number;
+  payment_date?: string;
+  payment_method: string;
+  receipt_image_url?: string;
+  notes?: string;
+  shift_id?: string;
+  created_at?: string;
+}
+
 export interface Credit {
   id: string;
   customer_id?: string;
@@ -51,5 +63,6 @@ export interface Credit {
   created_at: string;
   installments: CreditInstallment[];
   charges?: CreditCharge[];
+  payments?: CreditPayment[];
 }
 

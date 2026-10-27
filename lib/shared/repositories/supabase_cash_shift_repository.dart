@@ -45,36 +45,51 @@ class SupabaseCashShiftRepository {
 
       // 2. Sumar abonos a créditos en efectivo desde la apertura del turno
       try {
-        final creditsRes = await client
-            .from('credit_installments')
-            .select('paid_amount, amount, is_paid, paid_at, payment_method, notes');
+        final paymentsRes = await client
+            .from('credit_payments')
+            .select('amount, payment_date, payment_method, shift_id')
+            .gte('payment_date', openedAt.toIso8601String());
 
-        for (var c in creditsRes as List) {
-          if (c['paid_at'] != null) {
-            final DateTime paidDate = DateTime.parse(c['paid_at']);
-            final String pm = (c['payment_method'] ?? '').toString().toLowerCase();
+        for (var p in paymentsRes as List) {
+          final String pm = (p['payment_method'] ?? '').toString().toLowerCase();
+          if (pm.contains('efectivo')) {
+            computedCashCredits += (p['amount'] as num? ?? 0).toDouble();
+          }
+        }
+      } catch (_) {
+        // Fallback a credit_installments si la tabla credit_payments no existe
+        try {
+          final creditsRes = await client
+              .from('credit_installments')
+              .select('paid_amount, amount, is_paid, paid_at, payment_method, notes');
 
-            if (paidDate.isAfter(openedAt) || paidDate.isAtSameMomentAs(openedAt)) {
-              if (pm.contains('efectivo')) {
-                final double quotaVal = (c['amount'] as num).toDouble();
-                final bool isPaid = c['is_paid'] == true;
-                double pAmt = (c['paid_amount'] as num? ?? 0).toDouble();
-                if (pAmt == 0) {
-                  pAmt = isPaid ? quotaVal : 0.0;
-                  final String notesStr = c['notes'] ?? '';
-                  if (notesStr.contains('Abono: \$')) {
-                    try {
-                      final part = notesStr.split('Abono: \$')[1].split(' ')[0];
-                      pAmt = double.tryParse(part) ?? pAmt;
-                    } catch (_) {}
+          for (var c in creditsRes as List) {
+            if (c['paid_at'] != null) {
+              final DateTime paidDate = DateTime.parse(c['paid_at']);
+              final String pm = (c['payment_method'] ?? '').toString().toLowerCase();
+
+              if (paidDate.isAfter(openedAt) || paidDate.isAtSameMomentAs(openedAt)) {
+                if (pm.contains('efectivo')) {
+                  final double quotaVal = (c['amount'] as num).toDouble();
+                  final bool isPaid = c['is_paid'] == true;
+                  double pAmt = (c['paid_amount'] as num? ?? 0).toDouble();
+                  if (pAmt == 0) {
+                    pAmt = isPaid ? quotaVal : 0.0;
+                    final String notesStr = c['notes'] ?? '';
+                    if (notesStr.contains('Abono: \$')) {
+                      try {
+                        final part = notesStr.split('Abono: \$')[1].split(' ')[0];
+                        pAmt = double.tryParse(part) ?? pAmt;
+                      } catch (_) {}
+                    }
                   }
+                  computedCashCredits += pAmt;
                 }
-                computedCashCredits += pAmt;
               }
             }
           }
-        }
-      } catch (_) {}
+        } catch (_) {}
+      }
 
       // 3. Cargar egresos del turno
       List<CashExpense> expensesList = [];

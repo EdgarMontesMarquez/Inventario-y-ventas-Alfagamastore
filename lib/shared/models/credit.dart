@@ -97,6 +97,50 @@ class CreditCharge {
   }
 }
 
+class CreditPayment {
+  final String id;
+  final String creditId;
+  final double amount;
+  final DateTime paymentDate;
+  final String paymentMethod;
+  final String? receiptImageUrl;
+  final String notes;
+  final String? shiftId;
+
+  const CreditPayment({
+    required this.id,
+    required this.creditId,
+    required this.amount,
+    required this.paymentDate,
+    this.paymentMethod = 'efectivo',
+    this.receiptImageUrl,
+    this.notes = '',
+    this.shiftId,
+  });
+
+  CreditPayment copyWith({
+    String? id,
+    String? creditId,
+    double? amount,
+    DateTime? paymentDate,
+    String? paymentMethod,
+    String? receiptImageUrl,
+    String? notes,
+    String? shiftId,
+  }) {
+    return CreditPayment(
+      id: id ?? this.id,
+      creditId: creditId ?? this.creditId,
+      amount: amount ?? this.amount,
+      paymentDate: paymentDate ?? this.paymentDate,
+      paymentMethod: paymentMethod ?? this.paymentMethod,
+      receiptImageUrl: receiptImageUrl ?? this.receiptImageUrl,
+      notes: notes ?? this.notes,
+      shiftId: shiftId ?? this.shiftId,
+    );
+  }
+}
+
 class Credit {
   final String id;
   final String clientName;
@@ -110,6 +154,7 @@ class Credit {
   final double quotaValue;
   final List<CreditInstallment> installments;
   final List<CreditCharge> charges;
+  final List<CreditPayment> payments;
   final String generalNotes;
 
   const Credit({
@@ -125,6 +170,7 @@ class Credit {
     required this.quotaValue,
     required this.installments,
     this.charges = const [],
+    this.payments = const [],
     required this.generalNotes,
   });
 
@@ -141,6 +187,7 @@ class Credit {
     double? quotaValue,
     List<CreditInstallment>? installments,
     List<CreditCharge>? charges,
+    List<CreditPayment>? payments,
     String? generalNotes,
   }) {
     return Credit(
@@ -156,11 +203,49 @@ class Credit {
       quotaValue: quotaValue ?? this.quotaValue,
       installments: installments ?? this.installments,
       charges: charges ?? this.charges,
+      payments: payments ?? this.payments,
       generalNotes: generalNotes ?? this.generalNotes,
     );
   }
 
-  double get totalPaid => installments.fold(0.0, (sum, item) => sum + item.paidAmount);
+  double get totalPaid {
+    if (payments.isNotEmpty) {
+      return payments.fold(0.0, (sum, p) => sum + p.amount);
+    }
+    return installments.fold(0.0, (sum, item) => sum + item.paidAmount);
+  }
+
+  /// Distribuye el total pagado entre las cuotas en cascada (waterfall)
+  static List<CreditInstallment> distributePaidAmount(
+    List<CreditInstallment> baseInstallments,
+    double totalPaidToDistribute,
+  ) {
+    double remaining = totalPaidToDistribute;
+    return baseInstallments.map((inst) {
+      if (remaining <= 0) {
+        return inst.copyWith(paidAmount: 0.0);
+      }
+      if (remaining >= inst.quotaValue) {
+        remaining -= inst.quotaValue;
+        return inst.copyWith(paidAmount: inst.quotaValue);
+      } else {
+        final paidForThis = remaining;
+        remaining = 0;
+        return inst.copyWith(paidAmount: paidForThis);
+      }
+    }).toList();
+  }
+
+  /// Agrega un nuevo abono/pago y redistribuye las cuotas en cascada
+  Credit addPayment(CreditPayment payment) {
+    final newPayments = List<CreditPayment>.from(payments)..add(payment);
+    final total = newPayments.fold(0.0, (sum, p) => sum + p.amount);
+    final amortizedInstallments = distributePaidAmount(installments, total);
+    return copyWith(
+      payments: newPayments,
+      installments: amortizedInstallments,
+    );
+  }
 
   double get totalExtraCharges => charges.fold(0.0, (sum, item) => sum + item.amount);
 

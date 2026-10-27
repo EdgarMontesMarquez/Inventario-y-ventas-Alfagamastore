@@ -15,6 +15,11 @@ interface Sale {
   id: string; lines: SaleLine[]; total: number
   paymentMethod: 'efectivo' | 'tarjeta' | 'transferencia'; createdAt: Date; note: string
 }
+interface CreditPayment {
+  id: string; creditId: string; amount: number
+  paymentMethod: 'efectivo' | 'tarjeta' | 'transferencia'
+  paymentDate: Date; notes: string; receiptImageUrl?: string
+}
 interface CreditInstallment {
   quotaNumber: number; dueDate: Date; quotaValue: number
   paidAmount: number; paidDate: Date | null; paymentMethod: string; notes: string
@@ -26,6 +31,7 @@ interface Credit {
   paymentFrequency: 'semanal' | 'quincenal' | 'mensual'
   totalQuotas: number; quotaValue: number
   installments: CreditInstallment[]; generalNotes: string
+  payments?: CreditPayment[]
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -88,13 +94,31 @@ function instStatus(inst: CreditInstallment): 'pagado' | 'parcial' | 'vencido' |
   if (due < todayStart) return 'vencido'
   return 'pendiente'
 }
+function totalPaid(c: Credit) {
+  if (c.payments && c.payments.length > 0) {
+    return c.payments.reduce((s, p) => s + p.amount, 0)
+  }
+  return c.installments.reduce((s, i) => s + i.paidAmount, 0)
+}
 function creditStatus(c: Credit): 'al_dia' | 'mora' | 'finalizado' {
-  const paid = c.installments.reduce((s, i) => s + i.paidAmount, 0)
+  const paid = totalPaid(c)
   if (paid >= c.totalSale) return 'finalizado'
   if (c.installments.some(i => instStatus(i) === 'vencido')) return 'mora'
   return 'al_dia'
 }
-function totalPaid(c: Credit) { return c.installments.reduce((s, i) => s + i.paidAmount, 0) }
+function distributePaidAmount(installments: CreditInstallment[], totalPaid: number): CreditInstallment[] {
+  let remaining = totalPaid
+  return installments.map(inst => {
+    const quotaVal = inst.quotaValue
+    const paidForThis = Math.min(quotaVal, Math.max(0, remaining))
+    remaining -= paidForThis
+    return {
+      ...inst,
+      paidAmount: paidForThis,
+      paidDate: paidForThis > 0 ? (inst.paidDate || new Date()) : null
+    }
+  })
+}
 function pendingBalance(c: Credit) { return Math.max(0, c.totalSale - totalPaid(c)) }
 function progressPct(c: Credit) {
   if (!c.totalSale || c.totalSale <= 0) return 0
@@ -259,27 +283,24 @@ function exportToPDF(credit: Credit) {
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(10)
   doc.setTextColor(13, 26, 51)
-  doc.text('PLAN DE PAGOS (DETALLE DE CUOTAS)', 15, 137)
-
-  let runningBal = credit.totalSale
-  const rows = credit.installments.map(inst => {
-    runningBal -= inst.paidAmount
-    return { inst, balance: Math.max(0, runningBal) }
-  })
+  doc.text('PLAN DE PAGOS (AMORTIZACIÓN DE CUOTAS)', 15, 137)
 
   autoTable(doc, {
     startY: 140,
     margin: { left: 15, right: 15 },
-    head: [['N°', 'Vencimiento', 'Cuota', 'Abono', 'Saldo', 'Estado', 'Método/Obs.']],
-    body: rows.map(r => [
-      r.inst.quotaNumber.toString(),
-      fmtDate(ensureDate(r.inst.dueDate)),
-      fmt(r.inst.quotaValue),
-      r.inst.paidAmount > 0 ? fmt(r.inst.paidAmount) : '-',
-      fmt(r.balance),
-      instStatus(r.inst).toUpperCase(),
-      r.inst.paymentMethod || r.inst.notes || '-'
-    ]),
+    head: [['N°', 'Vencimiento', 'Valor Cuota', 'Abonado', 'Saldo Cuota', 'Estado', 'Método / Obs.']],
+    body: credit.installments.map(inst => {
+      const quotaRemaining = Math.max(0, inst.quotaValue - inst.paidAmount)
+      return [
+        inst.quotaNumber.toString(),
+        fmtDate(ensureDate(inst.dueDate)),
+        fmt(inst.quotaValue),
+        inst.paidAmount > 0 ? fmt(inst.paidAmount) : '-',
+        fmt(quotaRemaining),
+        instStatus(inst).toUpperCase(),
+        inst.paymentMethod || inst.notes || '-'
+      ]
+    }),
     styles: {
       font: 'helvetica',
       fontSize: 8,
@@ -305,6 +326,42 @@ function exportToPDF(credit: Credit) {
   })
 
   let finalY = (doc as any).lastAutoTable.finalY || 140
+
+  // Historial de Abonos Recibidos
+  if (credit.payments && credit.payments.length > 0) {
+    let paymentsStartY = finalY + 8
+    if (paymentsStartY + 30 > 280) {
+      doc.addPage()
+      paymentsStartY = 15
+    }
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(10)
+    doc.setTextColor(13, 26, 51)
+    doc.text('HISTORIAL DE ABONOS RECIBIDOS', 15, paymentsStartY)
+
+    autoTable(doc, {
+      startY: paymentsStartY + 3,
+      margin: { left: 15, right: 15 },
+      head: [['Fecha', 'Monto Abonado', 'Método de Pago', 'Notas / Ref.']],
+      body: credit.payments.map((p, idx) => [
+        fmtDate(ensureDate(p.paymentDate)),
+        fmt(p.amount),
+        p.paymentMethod.toUpperCase(),
+        p.notes || `Abono #${idx + 1}`
+      ]),
+      styles: { font: 'helvetica', fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [0, 102, 255], textColor: [255, 255, 255], fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [248, 249, 250] },
+      columnStyles: {
+        0: { cellWidth: 28 },
+        1: { cellWidth: 32 },
+        2: { cellWidth: 35 },
+        3: { cellWidth: 'auto' }
+      }
+    })
+
+    finalY = (doc as any).lastAutoTable.finalY || finalY
+  }
   if (credit.generalNotes) {
     if (finalY + 25 > 280) {
       doc.addPage()
@@ -1886,13 +1943,6 @@ function CreditDetail({
   const next = nextDueInstallment(credit)
   const od = overdueCount(credit)
 
-  // Running balance for table display
-  let runningBal = credit.totalSale
-  const rows = credit.installments.map(inst => {
-    runningBal -= inst.paidAmount
-    return { inst, balance: Math.max(0, runningBal) }
-  })
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Header */}
@@ -2072,15 +2122,16 @@ function CreditDetail({
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 580 }}>
               <thead>
                 <tr style={{ background: '#0a0a0a' }}>
-                  {['N°', 'Fecha', 'Cuota', 'Abono', 'Saldo', 'Estado', 'Obs.'].map(h => (
+                  {['N°', 'Fecha', 'Valor Cuota', 'Abonado', 'Saldo Cuota', 'Estado', 'Obs.'].map(h => (
                     <th key={h} style={{ padding: '8px 10px', fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: '#555', letterSpacing: '0.07em', textAlign: 'left', borderBottom: '1px solid #1e1e1e', whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {rows.map(({ inst, balance }, idx) => {
+                {credit.installments.map((inst, idx) => {
                   const s = instStatus(inst)
                   const isEven = idx % 2 === 0
+                  const quotaBal = Math.max(0, inst.quotaValue - inst.paidAmount)
                   return (
                     <tr
                       key={inst.quotaNumber}
@@ -2089,12 +2140,12 @@ function CreditDetail({
                       style={{ background: isEven ? '#0e0e0e' : '#111', cursor: 'pointer' }}
                     >
                       <td style={{ padding: '9px 10px', fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: '#555', borderBottom: '1px solid #151515' }}>{inst.quotaNumber}</td>
-                      <td style={{ padding: '9px 10px', fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: s === 'vencido' ? '#ff3d3d' : '#888', borderBottom: '1px solid #151515', whiteSpace: 'nowrap' }}>{fmtDate(inst.dueDate)}</td>
+                      <td style={{ padding: '9px 10px', fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: s === 'vencido' ? '#ff3d3d' : '#888', borderBottom: '1px solid #151515', whiteSpace: 'nowrap' }}>{fmtDate(ensureDate(inst.dueDate))}</td>
                       <td style={{ padding: '9px 10px', fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: '#888', borderBottom: '1px solid #151515', whiteSpace: 'nowrap' }}>{fmt(inst.quotaValue)}</td>
                       <td style={{ padding: '9px 10px', fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: inst.paidAmount > 0 ? '#00e676' : '#333', borderBottom: '1px solid #151515', whiteSpace: 'nowrap' }}>
                         {inst.paidAmount > 0 ? fmt(inst.paidAmount) : '—'}
                       </td>
-                      <td style={{ padding: '9px 10px', fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: balance > 0 ? '#ff3d3d' : '#00e676', borderBottom: '1px solid #151515', whiteSpace: 'nowrap' }}>{fmt(balance)}</td>
+                      <td style={{ padding: '9px 10px', fontFamily: 'JetBrains Mono, monospace', fontSize: 12, fontWeight: 700, color: quotaBal > 0 ? '#448aff' : '#00e676', borderBottom: '1px solid #151515', whiteSpace: 'nowrap' }}>{fmt(quotaBal)}</td>
                       <td style={{ padding: '9px 10px', borderBottom: '1px solid #151515' }}><InstStatusBadge status={s} /></td>
                       <td style={{ padding: '9px 10px', fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#444', borderBottom: '1px solid #151515', whiteSpace: 'nowrap' }}>{inst.paymentMethod || '—'}</td>
                     </tr>
@@ -2104,6 +2155,42 @@ function CreditDetail({
             </table>
           </div>
         </div>
+
+        {/* Payments History Table */}
+        {credit.payments && credit.payments.length > 0 && (
+          <div style={{ background: '#111', border: '1px solid #1e1e1e', borderRadius: 12, overflow: 'hidden', marginBottom: 14 }}>
+            <div style={{ padding: '12px 14px', borderBottom: '1px solid #1e1e1e', background: 'rgba(68,138,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#448aff' }}>
+                Historial de Abonos Recibidos ({credit.payments.length})
+              </span>
+              <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, fontWeight: 700, color: '#00e676' }}>
+                Total: {fmt(paid)}
+              </span>
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 480 }}>
+                <thead>
+                  <tr style={{ background: '#0a0a0a' }}>
+                    {['#', 'Fecha', 'Valor Abonado', 'Método', 'Observación / Ref.'].map(h => (
+                      <th key={h} style={{ padding: '8px 10px', fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: '#555', letterSpacing: '0.07em', textAlign: 'left', borderBottom: '1px solid #1e1e1e', whiteSpace: 'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {credit.payments.map((pmt, pIdx) => (
+                    <tr key={pmt.id || pIdx} style={{ background: pIdx % 2 === 0 ? '#0e0e0e' : '#111' }}>
+                      <td style={{ padding: '9px 10px', fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#555', borderBottom: '1px solid #151515' }}>#{credit.payments!.length - pIdx}</td>
+                      <td style={{ padding: '9px 10px', fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#888', borderBottom: '1px solid #151515', whiteSpace: 'nowrap' }}>{fmtDate(ensureDate(pmt.paymentDate))}</td>
+                      <td style={{ padding: '9px 10px', fontFamily: 'JetBrains Mono, monospace', fontSize: 12, fontWeight: 700, color: '#00e676', borderBottom: '1px solid #151515', whiteSpace: 'nowrap' }}>{fmt(pmt.amount)}</td>
+                      <td style={{ padding: '9px 10px', fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#448aff', borderBottom: '1px solid #151515', textTransform: 'capitalize', whiteSpace: 'nowrap' }}>{pmt.paymentMethod}</td>
+                      <td style={{ padding: '9px 10px', fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#777', borderBottom: '1px solid #151515' }}>{pmt.notes || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {/* Notes */}
         {credit.generalNotes && (
@@ -2166,11 +2253,27 @@ function RegisterPaymentModal({ credit, onSave, onClose }: { credit: Credit; onS
   }
 
   const handleSave = () => {
-    if (selectedIdx < 0 || !Number(amount) || Number(amount) <= 0) return
-    const updated = { ...credit, installments: credit.installments.map((inst, i) => {
-      if (i !== selectedIdx) return inst
-      return { ...inst, paidAmount: inst.paidAmount + Number(amount), paidDate: new Date(), paymentMethod: method, notes }
-    })}
+    const paidVal = Number(amount)
+    if (!paidVal || paidVal <= 0) return
+
+    const newPayment: CreditPayment = {
+      id: uid(),
+      creditId: credit.id,
+      amount: paidVal,
+      paymentMethod: method,
+      paymentDate: new Date(),
+      notes: notes.trim()
+    }
+
+    const updatedPayments = [...(credit.payments || []), newPayment]
+    const newTotalPaid = updatedPayments.reduce((s, p) => s + p.amount, 0)
+    const updatedInstallments = distributePaidAmount(credit.installments, newTotalPaid)
+
+    const updated: Credit = {
+      ...credit,
+      payments: updatedPayments,
+      installments: updatedInstallments
+    }
     onSave(updated)
   }
 
@@ -2383,6 +2486,10 @@ export default function App() {
           ...i,
           dueDate: ensureDate(i.dueDate),
           paidDate: i.paidDate ? ensureDate(i.paidDate) : null,
+        })),
+        payments: (c.payments || []).map((p: any) => ({
+          ...p,
+          paymentDate: ensureDate(p.paymentDate || p.createdAt || p.payment_date)
         })),
       }))
     } catch {

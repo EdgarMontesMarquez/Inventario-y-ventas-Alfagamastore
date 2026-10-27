@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/design_system/tokens/color_tokens.dart';
 import '../../../core/design_system/tokens/font_tokens.dart';
@@ -37,17 +39,7 @@ class _CollectionCenterScreenState extends ConsumerState<CollectionCenterScreen>
 
   Future<void> _sendWhatsAppMessage(String phone, String message) async {
     final cleanPhone = phone.replaceAll(RegExp(r'[^0-9]'), '');
-    if (cleanPhone.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('El cliente no tiene un teléfono registrado.'),
-            backgroundColor: ColorTokens.statusWarning,
-          ),
-        );
-      }
-      return;
-    }
+    if (cleanPhone.isEmpty) return;
 
     final formattedPhone = cleanPhone.length == 10 ? '57$cleanPhone' : cleanPhone;
     final uri = Uri.parse('https://wa.me/$formattedPhone?text=${Uri.encodeComponent(message)}');
@@ -55,10 +47,11 @@ class _CollectionCenterScreenState extends ConsumerState<CollectionCenterScreen>
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } else {
       if (mounted) {
+        Clipboard.setData(ClipboardData(text: message));
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('No se pudo abrir WhatsApp.'),
-            backgroundColor: ColorTokens.statusDanger,
+            content: Text('No se pudo abrir WhatsApp directamente. Mensaje copiado al portapapeles 📋'),
+            backgroundColor: ColorTokens.statusWarning,
           ),
         );
       }
@@ -72,6 +65,142 @@ class _CollectionCenterScreenState extends ConsumerState<CollectionCenterScreen>
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
     }
+  }
+
+  void _handleSendClientMessage(BuildContext context, Credit credit, String message) {
+    final cleanPhone = credit.clientPhone.replaceAll(RegExp(r'[^0-9]'), '');
+    if (cleanPhone.isNotEmpty) {
+      _sendWhatsAppMessage(credit.clientPhone, message);
+    } else {
+      _showNoPhoneBottomSheet(context, credit, message);
+    }
+  }
+
+  void _showNoPhoneBottomSheet(BuildContext context, Credit credit, String message) {
+    final phoneCtrl = TextEditingController();
+    bool saveToCustomer = true;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.phone_missed_outlined, color: ColorTokens.statusWarning, size: 24),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Teléfono no registrado',
+                      style: FontTokens.h3.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'El cliente "${credit.clientName}" no tiene un número registrado. Ingresa su número para enviarle el recordatorio:',
+                style: FontTokens.bodyMedium.copyWith(color: ColorTokens.lightTextSecondary),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: phoneCtrl,
+                keyboardType: TextInputType.phone,
+                autofocus: true,
+                decoration: InputDecoration(
+                  labelText: 'Número de WhatsApp',
+                  hintText: '3001234567',
+                  prefixIcon: const Icon(Icons.phone),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Checkbox(
+                    value: saveToCustomer,
+                    onChanged: (val) => setModalState(() => saveToCustomer = val ?? true),
+                  ),
+                  const Expanded(
+                    child: Text(
+                      'Guardar número en el cliente para futuros cobros',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: message));
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Mensaje copiado al portapapeles 📋')),
+                        );
+                      },
+                      icon: const Icon(Icons.copy, size: 16),
+                      label: const Text('Copiar'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton.icon(
+                      onPressed: () async {
+                        final inputPhone = phoneCtrl.text.replaceAll(RegExp(r'[^0-9]'), '');
+                        if (inputPhone.isEmpty) {
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            const SnackBar(content: Text('Ingresa un número válido')),
+                          );
+                          return;
+                        }
+
+                        if (saveToCustomer) {
+                          try {
+                            final client = Supabase.instance.client;
+                            await client.from('credits').update({'customer_phone': inputPhone}).eq('id', credit.id);
+                            if (credit.clientName.isNotEmpty) {
+                              await client.from('customers').update({'phone': inputPhone}).eq('name', credit.clientName);
+                            }
+                            ref.invalidate(creditsFutureProvider);
+                          } catch (_) {}
+                        }
+
+                        if (ctx.mounted) {
+                          Navigator.pop(ctx);
+                        }
+                        _sendWhatsAppMessage(inputPhone, message);
+                      },
+                      icon: const Icon(Icons.send, size: 16, color: Colors.white),
+                      label: const Text('Enviar WhatsApp', style: TextStyle(color: Colors.white)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: ColorTokens.statusSuccess,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -148,56 +277,60 @@ class _CollectionCenterScreenState extends ConsumerState<CollectionCenterScreen>
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 color: ColorTokens.lightBgSecondary,
-                child: Row(
+                child: Column(
                   children: [
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: ColorTokens.lightBorderSubtle),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'HOY: ${todayItems.length} CUOTA(S)',
-                              style: FontTokens.label.copyWith(fontSize: 8, color: ColorTokens.lightBrandPrimary, fontWeight: FontWeight.bold),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: ColorTokens.lightBorderSubtle),
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              CurrencyUtils.format(totalHoy),
-                              style: FontTokens.bodyMedium.copyWith(fontWeight: FontWeight.bold, color: ColorTokens.lightBrandPrimary),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'HOY: ${todayItems.length} CUOTA(S)',
+                                  style: FontTokens.label.copyWith(fontSize: 8, color: ColorTokens.lightBrandPrimary, fontWeight: FontWeight.bold),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  CurrencyUtils.format(totalHoy),
+                                  style: FontTokens.bodyMedium.copyWith(fontWeight: FontWeight.bold, color: ColorTokens.lightBrandPrimary),
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: ColorTokens.lightBorderSubtle),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'MORA: ${overdueItems.length} CUOTA(S)',
-                              style: FontTokens.label.copyWith(fontSize: 8, color: ColorTokens.statusDanger, fontWeight: FontWeight.bold),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: ColorTokens.lightBorderSubtle),
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              CurrencyUtils.format(totalMora),
-                              style: FontTokens.bodyMedium.copyWith(fontWeight: FontWeight.bold, color: ColorTokens.statusDanger),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'MORA: ${overdueItems.length} CUOTA(S)',
+                                  style: FontTokens.label.copyWith(fontSize: 8, color: ColorTokens.statusDanger, fontWeight: FontWeight.bold),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  CurrencyUtils.format(totalMora),
+                                  style: FontTokens.bodyMedium.copyWith(fontWeight: FontWeight.bold, color: ColorTokens.statusDanger),
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
-                      ),
+                      ],
                     ),
                   ],
                 ),
@@ -439,14 +572,26 @@ class _CollectionCenterScreenState extends ConsumerState<CollectionCenterScreen>
             children: [
               // Botón WhatsApp
               Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => _sendWhatsAppMessage(credit.clientPhone, whatsappMessage),
-                  icon: const Icon(Icons.chat_bubble_outline, size: 16, color: ColorTokens.statusSuccess),
-                  label: const Text('WhatsApp', style: TextStyle(fontSize: 12, color: ColorTokens.statusSuccess, fontWeight: FontWeight.bold)),
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: ColorTokens.statusSuccess),
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                child: Tooltip(
+                  message: 'Toca para enviar WhatsApp o mantén presionado para copiar mensaje',
+                  child: OutlinedButton.icon(
+                    onPressed: () => _handleSendClientMessage(context, credit, whatsappMessage),
+                    onLongPress: () {
+                      Clipboard.setData(ClipboardData(text: whatsappMessage));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Mensaje de cobranza copiado al portapapeles 📋'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.chat_bubble_outline, size: 16, color: ColorTokens.statusSuccess),
+                    label: const Text('WhatsApp', style: TextStyle(fontSize: 12, color: ColorTokens.statusSuccess, fontWeight: FontWeight.bold)),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: ColorTokens.statusSuccess),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
                   ),
                 ),
               ),

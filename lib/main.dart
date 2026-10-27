@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/config/supabase_config.dart';
 import 'core/navigation/app_router.dart';
@@ -56,6 +57,84 @@ class _MyAppState extends ConsumerState<MyApp> {
         }
       },
     );
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAutomaticDailyNotification();
+    });
+  }
+
+  static bool _hasCheckedToday = false;
+
+  void _checkAutomaticDailyNotification() {
+    if (_hasCheckedToday) return;
+    _hasCheckedToday = true;
+
+    Future.delayed(const Duration(seconds: 4), () async {
+      if (!mounted) return;
+      try {
+        final client = Supabase.instance.client;
+        if (client.auth.currentUser == null) return;
+
+        final res = await client
+            .from('credits')
+            .select('customer_name, credit_installments(amount, paid_amount, is_paid, due_date)')
+            .neq('status', 'finalizado');
+
+        final credits = res as List? ?? [];
+        if (credits.isEmpty) return;
+
+        final now = DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
+        int dueTodayCount = 0;
+        int overdueCount = 0;
+        double totalDueToday = 0;
+
+        for (final c in credits) {
+          final insts = c['credit_installments'] as List? ?? [];
+          for (final inst in insts) {
+            final quotaVal = (inst['amount'] as num?)?.toDouble() ?? 0;
+            final paidVal = (inst['paid_amount'] as num?)?.toDouble() ?? 0;
+            final isPaid = inst['is_paid'] == true || paidVal >= quotaVal;
+            if (isPaid) continue;
+
+            final pendingQuota = quotaVal - paidVal;
+            final dueDateStr = (inst['due_date'] as String?)?.split('T')[0];
+            if (dueDateStr == null) continue;
+            final dueDate = DateTime.tryParse(dueDateStr);
+            if (dueDate == null) continue;
+
+            final diffDays = today.difference(DateTime(dueDate.year, dueDate.month, dueDate.day)).inDays;
+            if (diffDays == 0) {
+              dueTodayCount++;
+              totalDueToday += pendingQuota;
+            } else if (diffDays > 0) {
+              overdueCount++;
+            }
+          }
+        }
+
+        if (dueTodayCount > 0 || overdueCount > 0) {
+          final fmt = NumberFormat.currency(locale: 'es_CO', symbol: '\$', decimalDigits: 0);
+          final formattedHoy = fmt.format(totalDueToday);
+
+          String body = '';
+          if (dueTodayCount > 0 && overdueCount > 0) {
+            body = '📅 $dueTodayCount cobro(s) para hoy ($formattedHoy) · ⚠️ $overdueCount en mora. Toca para ver.';
+          } else if (dueTodayCount > 0) {
+            body = '📅 Tienes $dueTodayCount cobro(s) programados para hoy por un total de $formattedHoy.';
+          } else {
+            body = '⚠️ Tienes $overdueCount cliente(s) con cuotas vencidas en mora.';
+          }
+
+          PushNotificationService().showInAppNotificationBanner(
+            title: '🔔 Alfa Gama Store · Cobranza del Día',
+            body: body,
+          );
+        }
+      } catch (e) {
+        debugPrint('Aviso en chequeo automático de cobranza: $e');
+      }
+    });
   }
 
   @override

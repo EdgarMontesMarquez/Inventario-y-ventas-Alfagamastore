@@ -29,4 +29,5 @@ abstract class CreditRepository {
   Future<void> updateCredit(Credit credit);
   Future<void> deleteCredit(String creditId);
   Future<void> addExtraCharge(String creditId, CreditCharge charge, Credit updatedCredit);
+  Future<void> addPayment(String creditId, CreditPayment payment, Credit updatedCredit);
 }

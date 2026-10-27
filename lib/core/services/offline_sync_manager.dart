@@ -384,6 +384,29 @@ class OfflineSyncManager {
         }
         break;
 
+      case 'ADD_CREDIT_PAYMENT':
+        final creditId = payload['credit_id']?.toString() ?? '';
+        final paymentData = Map<String, dynamic>.from(payload['payment'] ?? {});
+        final updatedCredit = Map<String, dynamic>.from(payload['updated_credit'] ?? {});
+        if (creditId.isNotEmpty) {
+          try {
+            await client.from('credit_payments').insert({
+              'credit_id': creditId,
+              'amount': paymentData['amount'],
+              'payment_date': paymentData['payment_date'],
+              'payment_method': paymentData['payment_method'],
+              'receipt_image_url': paymentData['receipt_image_url'],
+              'notes': paymentData['notes'],
+              if (paymentData['shift_id'] != null) 'shift_id': paymentData['shift_id'],
+            });
+          } catch (_) {}
+
+          if (updatedCredit.isNotEmpty) {
+            await client.from('credits').update(updatedCredit).eq('id', creditId);
+          }
+        }
+        break;
+
       case 'OPEN_SHIFT':
         await client.from('cash_shifts').insert({
           'user_id': payload['user_id'],
@@ -483,12 +506,16 @@ class OfflineSyncManager {
       // 4. Créditos
       dynamic creditsRes;
       try {
-        creditsRes = await client.from('credits').select('*, credit_installments(*), credit_charges(*)').order('created_at', ascending: false);
+        creditsRes = await client.from('credits').select('*, credit_installments(*), credit_charges(*), credit_payments(*)').order('created_at', ascending: false);
       } catch (_) {
-        creditsRes = await client.from('credits').select('*, credit_installments(*)').order('created_at', ascending: false);
+        try {
+          creditsRes = await client.from('credits').select('*, credit_installments(*), credit_charges(*)').order('created_at', ascending: false);
+        } catch (_) {
+          creditsRes = await client.from('credits').select('*, credit_installments(*)').order('created_at', ascending: false);
+        }
       }
       final credits = (creditsRes as List).map((map) {
-        final insts = (map['credit_installments'] as List? ?? []).map((instMap) {
+        var insts = (map['credit_installments'] as List? ?? []).map((instMap) {
           final double quotaVal = (instMap['amount'] as num).toDouble();
           final bool isPaid = instMap['is_paid'] == true;
           double rawPaid = (instMap['paid_amount'] as num? ?? 0).toDouble();
@@ -515,6 +542,27 @@ class OfflineSyncManager {
         }).toList();
         insts.sort((a, b) => a.quotaNumber.compareTo(b.quotaNumber));
 
+        final paymentsList = (map['credit_payments'] as List? ?? []).map((pMap) {
+          return CreditPayment(
+            id: pMap['id']?.toString() ?? '',
+            creditId: pMap['credit_id']?.toString() ?? map['id'].toString(),
+            amount: (pMap['amount'] as num? ?? 0).toDouble(),
+            paymentDate: pMap['payment_date'] != null 
+                ? DateTime.parse(pMap['payment_date']) 
+                : (pMap['created_at'] != null ? DateTime.parse(pMap['created_at']) : DateTime.now()),
+            paymentMethod: pMap['payment_method'] ?? 'efectivo',
+            receiptImageUrl: pMap['receipt_image_url'],
+            notes: pMap['notes'] ?? '',
+            shiftId: pMap['shift_id']?.toString(),
+          );
+        }).toList();
+        paymentsList.sort((a, b) => b.paymentDate.compareTo(a.paymentDate));
+
+        if (paymentsList.isNotEmpty) {
+          final totalPaid = paymentsList.fold(0.0, (sum, p) => sum + p.amount);
+          insts = Credit.distributePaidAmount(insts, totalPaid);
+        }
+
         final charges = (map['credit_charges'] as List? ?? []).map((chMap) => CreditCharge(
           id: chMap['id']?.toString() ?? '',
           creditId: chMap['credit_id']?.toString() ?? map['id'].toString(),
@@ -540,6 +588,7 @@ class OfflineSyncManager {
           quotaValue: insts.isNotEmpty ? insts.first.quotaValue : 0.0,
           installments: insts,
           charges: charges,
+          payments: paymentsList,
           generalNotes: map['notes'] ?? '',
         );
       }).toList();

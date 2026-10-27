@@ -188,6 +188,16 @@ class OfflineStorageService {
         'created_by': ch.createdBy,
         'notes': ch.notes,
       }).toList(),
+      'payments': c.payments.map((p) => {
+        'id': p.id,
+        'credit_id': p.creditId,
+        'amount': p.amount,
+        'payment_date': p.paymentDate.toIso8601String(),
+        'payment_method': p.paymentMethod,
+        'receipt_image_url': p.receiptImageUrl,
+        'notes': p.notes,
+        'shift_id': p.shiftId,
+      }).toList(),
     }).toList();
     await _writeJson('credits.json', list);
   }
@@ -218,6 +228,17 @@ class OfflineStorageService {
         notes: ch['notes']?.toString() ?? '',
       )).toList();
 
+      final payments = (m['payments'] as List? ?? []).map((p) => CreditPayment(
+        id: p['id']?.toString() ?? '',
+        creditId: p['credit_id']?.toString() ?? '',
+        amount: (p['amount'] as num? ?? 0).toDouble(),
+        paymentDate: p['payment_date'] != null ? DateTime.tryParse(p['payment_date']) ?? DateTime.now() : DateTime.now(),
+        paymentMethod: p['payment_method']?.toString() ?? 'efectivo',
+        receiptImageUrl: p['receipt_image_url']?.toString(),
+        notes: p['notes']?.toString() ?? '',
+        shiftId: p['shift_id']?.toString(),
+      )).toList();
+
       return Credit(
         id: m['id']?.toString() ?? '',
         clientName: m['client_name']?.toString() ?? '',
@@ -231,6 +252,7 @@ class OfflineStorageService {
         quotaValue: (m['quota_value'] as num? ?? 0).toDouble(),
         installments: installments,
         charges: charges,
+        payments: payments,
         generalNotes: m['general_notes']?.toString() ?? '',
       );
     }).toList();
