@@ -97,9 +97,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
+  String _formatNotificationTime(String time24) {
+    final parts = time24.split(':');
+    final hour = int.tryParse(parts.first) ?? 8;
+    final minute = parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0;
+    return _formatTimeOfDay(TimeOfDay(hour: hour, minute: minute));
+  }
+
+  String _formatTimeOfDay(TimeOfDay tod) {
+    final period = tod.period == DayPeriod.am ? 'AM' : 'PM';
+    final h = tod.hourOfPeriod == 0 ? 12 : tod.hourOfPeriod;
+    final m = tod.minute.toString().padLeft(2, '0');
+    return '$h:$m $period';
+  }
+
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
+    final settings = ref.watch(settingsProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -301,6 +316,68 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     subtitle: Text('Crear usuarios, asignar permisos y cambiar roles (Empleado vs Admin)', style: FontTokens.bodySmall.copyWith(color: ColorTokens.lightTextSecondary, fontSize: 11)),
                     trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: ColorTokens.lightTextSecondary),
                     onTap: () => context.push('/user-management'),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  decoration: BoxDecoration(
+                    color: ColorTokens.lightSurfacePrimary,
+                    border: Border.all(color: ColorTokens.lightBorderSubtle),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: BorderShadowTokens.shadow3DCard,
+                  ),
+                  child: ListTile(
+                    tileColor: ColorTokens.lightSurfacePrimary,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    leading: const Icon(Icons.alarm_on_rounded, color: ColorTokens.lightBrandPrimary),
+                    title: Text('Hora de Notificación de Cobranza', style: FontTokens.bodyLarge.copyWith(color: ColorTokens.lightTextPrimary, fontWeight: FontWeight.bold)),
+                    subtitle: Text('Envío automático diario de alertas de cartera a administradores (Hora Colombia)', style: FontTokens.bodySmall.copyWith(color: ColorTokens.lightTextSecondary, fontSize: 11)),
+                    trailing: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: ColorTokens.lightBrandPrimary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: ColorTokens.lightBrandPrimary.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _formatNotificationTime(settings.notificationTime),
+                            style: FontTokens.bodyMedium.copyWith(color: ColorTokens.lightBrandPrimary, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(Icons.edit, size: 14, color: ColorTokens.lightBrandPrimary),
+                        ],
+                      ),
+                    ),
+                    onTap: () async {
+                      final parts = settings.notificationTime.split(':');
+                      final currentH = int.tryParse(parts.first) ?? 8;
+                      final currentM = parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0;
+
+                      final picked = await showTimePicker(
+                        context: context,
+                        initialTime: TimeOfDay(hour: currentH, minute: currentM),
+                        helpText: 'HORA DE ENVÍO AUTOMÁTICO (HORA COLOMBIA)',
+                        confirmText: 'GUARDAR HORA',
+                        cancelText: 'CANCELAR',
+                      );
+
+                      if (picked != null && context.mounted) {
+                        final success = await ref.read(settingsProvider.notifier).setNotificationTime(picked.hour, picked.minute);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(success
+                                  ? '✅ Hora de cobro actualizada a ${_formatTimeOfDay(picked)}. Tarea automática reprogramada.'
+                                  : '⚠️ Hora guardada localmente. Aplica la migración RPC en Supabase.'),
+                              backgroundColor: success ? Colors.green.shade700 : Colors.orange.shade800,
+                            ),
+                          );
+                        }
+                      }
+                    },
                   ),
                 ),
                 const SizedBox(height: 10),

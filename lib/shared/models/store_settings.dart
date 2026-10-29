@@ -7,6 +7,7 @@ class StoreSettings {
   final String currencySymbol;
   final bool soundOnScan;
   final bool autoPrintReceipt;
+  final String notificationTime;
 
   const StoreSettings({
     required this.storeName,
@@ -17,6 +18,7 @@ class StoreSettings {
     required this.currencySymbol,
     required this.soundOnScan,
     required this.autoPrintReceipt,
+    this.notificationTime = '08:00',
   });
 
   StoreSettings copyWith({
@@ -28,6 +30,7 @@ class StoreSettings {
     String? currencySymbol,
     bool? soundOnScan,
     bool? autoPrintReceipt,
+    String? notificationTime,
   }) {
     return StoreSettings(
       storeName: storeName ?? this.storeName,
@@ -38,6 +41,7 @@ class StoreSettings {
       currencySymbol: currencySymbol ?? this.currencySymbol,
       soundOnScan: soundOnScan ?? this.soundOnScan,
       autoPrintReceipt: autoPrintReceipt ?? this.autoPrintReceipt,
+      notificationTime: notificationTime ?? this.notificationTime,
     );
   }
 }

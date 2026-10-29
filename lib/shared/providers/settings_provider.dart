@@ -71,9 +71,36 @@ class SettingsNotifier extends Notifier<StoreSettings> {
         currencySymbol: 'COP (\$)',
         soundOnScan: (profileRes?['sound_on_scan'] as bool?) ?? (local?.soundOnScan ?? true),
         autoPrintReceipt: (profileRes?['auto_print_receipt'] as bool?) ?? (local?.autoPrintReceipt ?? true),
+        notificationTime: storeRes?['notification_time']?.toString() ?? (local?.notificationTime ?? '08:00'),
       );
       state = updated;
       await _storage.saveSettings(updated);
+    }
+  }
+
+  /// Actualiza la hora de notificación en Supabase y reprograma pg_cron automáticamente
+  Future<bool> setNotificationTime(int hour, int minute) async {
+    final formatted = '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+    final updated = state.copyWith(notificationTime: formatted);
+    state = updated;
+    await _storage.saveSettings(updated);
+
+    try {
+      final res = await Supabase.instance.client.rpc('update_collection_notification_time', params: {
+        'new_hour': hour,
+        'new_minute': minute,
+      });
+      debugPrint('RPC update_collection_notification_time exitoso: $res');
+      return true;
+    } catch (e) {
+      debugPrint('Aviso en RPC update_collection_notification_time: $e');
+      try {
+        await Supabase.instance.client.from('store_settings').update({
+          'notification_time': formatted,
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('id', 1);
+      } catch (_) {}
+      return false;
     }
   }
 

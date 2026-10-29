@@ -405,6 +405,7 @@ class OfflineStorageService {
       'currencySymbol': settings.currencySymbol,
       'soundOnScan': settings.soundOnScan,
       'autoPrintReceipt': settings.autoPrintReceipt,
+      'notificationTime': settings.notificationTime,
     };
     await _writeJson('store_settings.json', map);
   }
@@ -421,6 +422,7 @@ class OfflineStorageService {
       currencySymbol: map['currencySymbol'] ?? 'COP (\$)',
       soundOnScan: (map['soundOnScan'] as bool?) ?? true,
       autoPrintReceipt: (map['autoPrintReceipt'] as bool?) ?? true,
+      notificationTime: map['notificationTime'] ?? '08:00',
     );
   }
 }
