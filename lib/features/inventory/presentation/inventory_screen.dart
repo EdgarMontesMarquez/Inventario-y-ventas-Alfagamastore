@@ -29,8 +29,15 @@ class InventoryScreen extends ConsumerStatefulWidget {
 }
 
 class _InventoryScreenState extends ConsumerState<InventoryScreen> {
+  final TextEditingController _searchCtrl = TextEditingController();
   String _searchQuery = '';
   String _selectedCategory = 'Todos';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
 
   void _openProductForm([Product? initialProduct]) {
     CustomOverlays.showBottomSheet(
@@ -140,8 +147,20 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                         Expanded(
                           child: CustomTextField(
                             label: '',
+                            controller: _searchCtrl,
                             hint: 'Buscar producto o SKU…',
                             prefixIcon: const Icon(Icons.search, size: 20, color: ColorTokens.textMuted),
+                            suffixIcon: _searchQuery.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear, size: 18, color: ColorTokens.textMuted),
+                                    onPressed: () {
+                                      _searchCtrl.clear();
+                                      setState(() {
+                                        _searchQuery = '';
+                                      });
+                                    },
+                                  )
+                                : null,
                             onChanged: (val) {
                               setState(() {
                                 _searchQuery = val;
@@ -162,6 +181,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                             onPressed: () async {
                               final scanned = await BarcodeScannerModal.scan(context);
                               if (scanned != null && mounted) {
+                                _searchCtrl.text = scanned;
                                 setState(() {
                                   _searchQuery = scanned;
                                 });

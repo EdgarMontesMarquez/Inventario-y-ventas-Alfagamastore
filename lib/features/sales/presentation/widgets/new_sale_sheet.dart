@@ -258,6 +258,7 @@ class _NewSaleSheetState extends ConsumerState<NewSaleSheet> {
                   );
                 }
 
+                final topAvailable = available.take(5).toList();
                 return Container(
                   constraints: const BoxConstraints(maxHeight: 160),
                   decoration: BoxDecoration(
@@ -265,18 +266,21 @@ class _NewSaleSheetState extends ConsumerState<NewSaleSheet> {
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: ColorTokens.border),
                   ),
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: available.take(5).length,
-                    separatorBuilder: (context, idx) => const Divider(height: 1),
-                    itemBuilder: (context, idx) {
-                      final p = available[idx];
-                      return ListTile(
-                        title: Text(p.name, style: FontTokens.bodyMedium),
-                        trailing: Text(CurrencyUtils.format(p.price), style: FontTokens.moneySmall.copyWith(color: ColorTokens.primary)),
-                        onTap: () => _addProductToLines(p),
-                      );
-                    },
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (int idx = 0; idx < topAvailable.length; idx++) ...[
+                          if (idx > 0) const Divider(height: 1),
+                          ListTile(
+                            dense: true,
+                            title: Text(topAvailable[idx].name, style: FontTokens.bodyMedium),
+                            trailing: Text(CurrencyUtils.format(topAvailable[idx].price), style: FontTokens.moneySmall.copyWith(color: ColorTokens.primary)),
+                            onTap: () => _addProductToLines(topAvailable[idx]),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
                 );
               },

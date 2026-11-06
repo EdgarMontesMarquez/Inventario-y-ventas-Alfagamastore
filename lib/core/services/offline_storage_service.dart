@@ -206,14 +206,14 @@ class OfflineStorageService {
     final data = await _readJson('credits.json');
     if (data == null || data is! List) return [];
     return data.map((m) {
-      final installments = (m['installments'] as List? ?? []).map((inst) => CreditInstallment(
+      var installments = (m['installments'] as List? ?? []).map((inst) => CreditInstallment(
         quotaNumber: (inst['quota_number'] as num? ?? 1).toInt(),
         dueDate: inst['due_date'] != null ? DateTime.tryParse(inst['due_date']) ?? DateTime.now() : DateTime.now(),
         quotaValue: (inst['quota_value'] as num? ?? 0).toDouble(),
         paidAmount: (inst['paid_amount'] as num? ?? 0).toDouble(),
         paidDate: inst['paid_date'] != null ? DateTime.tryParse(inst['paid_date']) : null,
         paymentMethod: inst['payment_method']?.toString() ?? '',
-        notes: inst['notes']?.toString() ?? '',
+        notes: Credit.cleanAbonoNotes(inst['notes']?.toString() ?? ''),
         receiptImageUrl: inst['receipt_image_url']?.toString(),
       )).toList();
 
@@ -228,16 +228,24 @@ class OfflineStorageService {
         notes: ch['notes']?.toString() ?? '',
       )).toList();
 
-      final payments = (m['payments'] as List? ?? []).map((p) => CreditPayment(
+      var payments = (m['payments'] as List? ?? []).map((p) => CreditPayment(
         id: p['id']?.toString() ?? '',
         creditId: p['credit_id']?.toString() ?? '',
         amount: (p['amount'] as num? ?? 0).toDouble(),
         paymentDate: p['payment_date'] != null ? DateTime.tryParse(p['payment_date']) ?? DateTime.now() : DateTime.now(),
         paymentMethod: p['payment_method']?.toString() ?? 'efectivo',
         receiptImageUrl: p['receipt_image_url']?.toString(),
-        notes: p['notes']?.toString() ?? '',
+        notes: Credit.cleanAbonoNotes(p['notes']?.toString() ?? ''),
         shiftId: p['shift_id']?.toString(),
       )).toList();
+
+      final reconciled = Credit.reconcileInstallmentsAndPayments(
+        m['id']?.toString() ?? '',
+        installments,
+        payments,
+      );
+      installments = reconciled.installments;
+      payments = reconciled.payments;
 
       return Credit(
         id: m['id']?.toString() ?? '',

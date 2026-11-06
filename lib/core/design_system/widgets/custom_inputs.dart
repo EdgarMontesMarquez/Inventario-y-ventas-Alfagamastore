@@ -31,6 +31,29 @@ class CustomTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final textField = TextFormField(
+      controller: controller,
+      keyboardType: keyboardType,
+      autofocus: autofocus,
+      inputFormatters: formatters,
+      validator: validator,
+      onChanged: onChanged,
+      style: FontTokens.bodyMedium.copyWith(
+        color: ColorTokens.lightTextPrimary,
+        fontWeight: FontWeight.w600,
+      ),
+      decoration: InputDecoration(
+        hintText: hint,
+        prefixIcon: prefixIcon,
+        suffixIcon: suffixIcon,
+        alignLabelWithHint: true,
+      ),
+    );
+
+    if (label.trim().isEmpty) {
+      return textField;
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -43,24 +66,7 @@ class CustomTextField extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 6),
-        TextFormField(
-          controller: controller,
-          keyboardType: keyboardType,
-          autofocus: autofocus,
-          inputFormatters: formatters,
-          validator: validator,
-          onChanged: onChanged,
-          style: FontTokens.bodyMedium.copyWith(
-            color: ColorTokens.lightTextPrimary,
-            fontWeight: FontWeight.w600,
-          ),
-          decoration: InputDecoration(
-            hintText: hint,
-            prefixIcon: prefixIcon,
-            suffixIcon: suffixIcon,
-            alignLabelWithHint: true,
-          ),
-        ),
+        textField,
       ],
     );
   }

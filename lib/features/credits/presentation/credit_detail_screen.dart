@@ -475,7 +475,9 @@ class CreditDetailScreen extends ConsumerWidget {
                             ? PdfColors.orange700 
                             : (statusKey == 'vencido' ? PdfColors.red700 : PdfColors.grey700));
 
-                    final quotaBal = (inst.quotaValue - inst.paidAmount).clamp(0.0, double.infinity);
+                    final quotaBal = isFullyPaid
+                        ? 0.0
+                        : (inst.quotaValue - inst.paidAmount).clamp(0.0, double.infinity);
 
                     return pw.TableRow(
                       decoration: pw.BoxDecoration(
@@ -550,6 +552,7 @@ class CreditDetailScreen extends ConsumerWidget {
                   for (int i = 0; i < credit.payments.length; i++)
                     () {
                       final p = credit.payments[i];
+                      final cleanNote = Credit.cleanAbonoNotes(p.notes);
                       return pw.TableRow(
                         decoration: pw.BoxDecoration(color: i % 2 == 0 ? PdfColors.white : PdfColors.grey50),
                         children: [
@@ -557,7 +560,7 @@ class CreditDetailScreen extends ConsumerWidget {
                           pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(DateFormat('dd/MM/yyyy hh:mm a').format(p.paymentDate), style: const pw.TextStyle(fontSize: 7))),
                           pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(cf.format(p.amount), style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold, color: PdfColors.green800))),
                           pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(p.paymentMethod.toUpperCase(), style: const pw.TextStyle(fontSize: 7))),
-                          pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(p.notes.isNotEmpty ? p.notes : '-', style: const pw.TextStyle(fontSize: 7))),
+                          pw.Padding(padding: const pw.EdgeInsets.all(4), child: pw.Text(cleanNote.isNotEmpty ? cleanNote : '-', style: const pw.TextStyle(fontSize: 7))),
                         ],
                       );
                     }(),
@@ -774,18 +777,24 @@ class CreditDetailScreen extends ConsumerWidget {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Row(
-                              children: [
-                                const Icon(Icons.badge_outlined, size: 16, color: ColorTokens.lightBrandPrimary),
-                                const SizedBox(width: 6),
-                                Text(
-                                  credit.generalNotes.contains('Documento:')
-                                      ? credit.generalNotes.split('|')[0].trim()
-                                      : 'Documento: CC Registrada',
-                                  style: FontTokens.bodySmall.copyWith(fontWeight: FontWeight.bold, color: ColorTokens.lightTextPrimary),
-                                ),
-                              ],
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.badge_outlined, size: 16, color: ColorTokens.lightBrandPrimary),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      credit.generalNotes.contains('Documento:')
+                                          ? credit.generalNotes.split('|')[0].trim()
+                                          : 'Documento: CC Registrada',
+                                      overflow: TextOverflow.ellipsis,
+                                      style: FontTokens.bodySmall.copyWith(fontWeight: FontWeight.bold, color: ColorTokens.lightTextPrimary),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
+                            const SizedBox(width: 8),
                             Row(
                               children: [
                                 const Icon(Icons.percent_outlined, size: 16, color: ColorTokens.lightBrandSecondary),
@@ -1008,20 +1017,26 @@ class CreditDetailScreen extends ConsumerWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  const Icon(Icons.receipt_long_outlined, color: ColorTokens.lightBrandPrimary, size: 20),
-                  const SizedBox(width: 8),
-                  Text(
-                    'CARGOS Y RECARGOS APLICADOS',
-                    style: FontTokens.label.copyWith(
-                      color: ColorTokens.lightBrandPrimary,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.8,
+              Expanded(
+                child: Row(
+                  children: [
+                    const Icon(Icons.receipt_long_outlined, color: ColorTokens.lightBrandPrimary, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'CARGOS Y RECARGOS APLICADOS',
+                        overflow: TextOverflow.ellipsis,
+                        style: FontTokens.label.copyWith(
+                          color: ColorTokens.lightBrandPrimary,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
@@ -1140,20 +1155,26 @@ class CreditDetailScreen extends ConsumerWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  const Icon(Icons.history_edu_outlined, color: ColorTokens.lightBrandPrimary, size: 20),
-                  const SizedBox(width: 8),
-                  Text(
-                    'HISTORIAL DE ABONOS RECIBIDOS',
-                    style: FontTokens.label.copyWith(
-                      color: ColorTokens.lightBrandPrimary,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.8,
+              Expanded(
+                child: Row(
+                  children: [
+                    const Icon(Icons.history_edu_outlined, color: ColorTokens.lightBrandPrimary, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'HISTORIAL DE ABONOS RECIBIDOS',
+                        overflow: TextOverflow.ellipsis,
+                        style: FontTokens.label.copyWith(
+                          color: ColorTokens.lightBrandPrimary,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
@@ -1161,7 +1182,7 @@ class CreditDetailScreen extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  '0 abonos registrados',
+                  '0 abonos',
                   style: FontTokens.label.copyWith(color: ColorTokens.lightBrandPrimary, fontWeight: FontWeight.bold, fontSize: 10),
                 ),
               ),
@@ -1201,20 +1222,26 @@ class CreditDetailScreen extends ConsumerWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Row(
-              children: [
-                const Icon(Icons.history_edu_outlined, color: ColorTokens.lightBrandPrimary, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  'HISTORIAL DE ABONOS RECIBIDOS',
-                  style: FontTokens.label.copyWith(
-                    color: ColorTokens.lightBrandPrimary,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.8,
+            Expanded(
+              child: Row(
+                children: [
+                  const Icon(Icons.history_edu_outlined, color: ColorTokens.lightBrandPrimary, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'HISTORIAL DE ABONOS RECIBIDOS',
+                      overflow: TextOverflow.ellipsis,
+                      style: FontTokens.label.copyWith(
+                        color: ColorTokens.lightBrandPrimary,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
+            const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
@@ -1296,10 +1323,10 @@ class CreditDetailScreen extends ConsumerWidget {
                           dateStr,
                           style: FontTokens.bodySmall.copyWith(fontSize: 10.5, color: ColorTokens.lightTextSecondary),
                         ),
-                        if (p.notes.isNotEmpty) ...[
+                        if (Credit.cleanAbonoNotes(p.notes).isNotEmpty) ...[
                           const SizedBox(height: 2),
                           Text(
-                            p.notes,
+                            Credit.cleanAbonoNotes(p.notes),
                             style: FontTokens.bodySmall.copyWith(fontSize: 11, fontStyle: FontStyle.italic, color: ColorTokens.lightTextPrimary),
                           ),
                         ],
@@ -1381,13 +1408,18 @@ class _RegisterPaymentSheetState extends State<_RegisterPaymentSheet> {
   @override
   void initState() {
     super.initState();
-    // Default to the first unpaid quota
+    // Default to the first unpaid quota (or last quota if all quotas reached quotaValue while balance remains)
     _selectedQuotaIdx = widget.credit.installments.indexWhere((i) => i.status != 'pagado');
-    if (_selectedQuotaIdx < 0) _selectedQuotaIdx = 0;
-    
+    if (_selectedQuotaIdx < 0) {
+      _selectedQuotaIdx = widget.credit.installments.isNotEmpty
+          ? widget.credit.installments.length - 1
+          : 0;
+    }
+
     final targetInst = widget.credit.installments[_selectedQuotaIdx];
     final pendingQuota = (targetInst.quotaValue - targetInst.paidAmount).clamp(0.0, double.infinity);
-    _amountCtrl = TextEditingController(text: pendingQuota.toInt().toString());
+    final defaultAmount = pendingQuota > 0 ? pendingQuota : widget.credit.pendingBalance;
+    _amountCtrl = TextEditingController(text: defaultAmount.toInt().toString());
     _notesCtrl = TextEditingController();
     _selectedPaymentDate = DateTime.now();
   }
@@ -1422,7 +1454,10 @@ class _RegisterPaymentSheetState extends State<_RegisterPaymentSheet> {
         receiptImageUrl: _paymentMethod == 'transferencia' ? _receiptImageUrl : null,
       );
 
-      final updatedCredit = widget.credit.addPayment(newPayment);
+      final updatedCredit = widget.credit.addPayment(
+        newPayment,
+        quotaIndex: _selectedQuotaIdx,
+      );
       widget.onSave(newPayment, updatedCredit);
     } catch (_) {
       if (mounted) {
@@ -1438,8 +1473,9 @@ class _RegisterPaymentSheetState extends State<_RegisterPaymentSheet> {
     final currencyFmt = NumberFormat.currency(locale: 'es_CO', symbol: '\$', decimalDigits: 0);
     final dateFmt = DateFormat('dd/MM/yyyy');
     final pendingInsts = widget.credit.installments.where((i) => i.status != 'pagado').toList();
+    final hasUnpaidInsts = pendingInsts.isNotEmpty;
 
-    if (pendingInsts.isEmpty) {
+    if (widget.credit.pendingBalance <= 0 || widget.credit.installments.isEmpty) {
       return Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -1464,15 +1500,16 @@ class _RegisterPaymentSheetState extends State<_RegisterPaymentSheet> {
           Text('SELECCIONA LA CUOTA A ABONAR', style: FontTokens.label),
           const SizedBox(height: 8),
           
-          // List of Unpaid Installment Buttons
+          // List of Installment Buttons
           Column(
             children: widget.credit.installments.asMap().entries.map((entry) {
               final idx = entry.key;
               final inst = entry.value;
-              if (inst.status == 'pagado') return const SizedBox();
+              if (hasUnpaidInsts && inst.status == 'pagado') return const SizedBox();
 
               final isSelected = _selectedQuotaIdx == idx;
               final pendingQuota = (inst.quotaValue - inst.paidAmount).clamp(0.0, double.infinity);
+              final suggestedAmount = pendingQuota > 0 ? pendingQuota : widget.credit.pendingBalance;
 
               return Padding(
                 padding: const EdgeInsets.only(bottom: 6),
@@ -1480,7 +1517,7 @@ class _RegisterPaymentSheetState extends State<_RegisterPaymentSheet> {
                   onTap: () {
                     setState(() {
                       _selectedQuotaIdx = idx;
-                      _amountCtrl.text = pendingQuota.toInt().toString();
+                      _amountCtrl.text = suggestedAmount.toInt().toString();
                     });
                   },
                   borderRadius: BorderRadius.circular(10),
@@ -1504,7 +1541,7 @@ class _RegisterPaymentSheetState extends State<_RegisterPaymentSheet> {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            Text('Pendiente: ${currencyFmt.format(pendingQuota)}', style: FontTokens.moneySmall.copyWith(color: isSelected ? ColorTokens.lightBrandPrimary : ColorTokens.lightTextPrimary, fontWeight: FontWeight.bold)),
+                            Text('Pendiente: ${currencyFmt.format(suggestedAmount)}', style: FontTokens.moneySmall.copyWith(color: isSelected ? ColorTokens.lightBrandPrimary : ColorTokens.lightTextPrimary, fontWeight: FontWeight.bold)),
                             const SizedBox(height: 2),
                             InstStatusBadge(status: inst.status),
                           ],
@@ -2389,13 +2426,13 @@ class _EditCreditSheetState extends ConsumerState<_EditCreditSheet> {
         ? <Customer>[]
         : registeredCustomers.where((c) =>
             c.name.toLowerCase().contains(_customerQuery.toLowerCase()) ||
-            (c.documentId.isNotEmpty && c.documentId.contains(_customerQuery))).toList();
+            (c.documentId.isNotEmpty && c.documentId.contains(_customerQuery))).take(8).toList();
 
     final matchingProducts = _productQuery.trim().isEmpty
         ? <Product>[]
         : productsList.where((p) =>
             p.name.toLowerCase().contains(_productQuery.toLowerCase()) ||
-            p.sku.toLowerCase().contains(_productQuery.toLowerCase())).toList();
+            p.sku.toLowerCase().contains(_productQuery.toLowerCase())).take(8).toList();
 
     final bool isFullyPaid = widget.credit.status == 'finalizado' || widget.credit.pendingBalance <= 0 || widget.credit.totalPaid >= widget.credit.totalSale;
 
@@ -2428,32 +2465,37 @@ class _EditCreditSheetState extends ConsumerState<_EditCreditSheet> {
                   border: Border.all(color: ColorTokens.primary),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: matchingCustomers.length,
-                  separatorBuilder: (ctx, index) => const Divider(height: 1),
-                  itemBuilder: (ctx, idx) {
-                    final c = matchingCustomers[idx];
-                    final docInfo = c.documentId.isNotEmpty ? '${c.documentType}: ${c.documentId}' : 'Sin doc';
-                    final phoneInfo = c.phone.isNotEmpty ? 'Tel: ${c.phone}' : 'Sin tel';
-                    return ListTile(
-                      dense: true,
-                      title: Text(c.name, style: FontTokens.bodyMedium.copyWith(fontWeight: FontWeight.bold)),
-                      subtitle: Text('$docInfo · $phoneInfo', style: FontTokens.bodySmall),
-                      trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: ColorTokens.primary),
-                      onTap: () {
-                        setState(() {
-                          _nameCtrl.text = c.name;
-                          _phoneCtrl.text = c.phone;
-                          _addressCtrl.text = c.address;
-                          _docIdCtrl.text = c.documentId;
-                          _docType = c.documentType.isNotEmpty ? c.documentType : 'CC';
-                          _customerQuery = '';
-                          _showCustomerResults = false;
-                        });
-                      },
-                    );
-                  },
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (int idx = 0; idx < matchingCustomers.length; idx++) ...[
+                        if (idx > 0) const Divider(height: 1),
+                        () {
+                          final c = matchingCustomers[idx];
+                          final docInfo = c.documentId.isNotEmpty ? '${c.documentType}: ${c.documentId}' : 'Sin doc';
+                          final phoneInfo = c.phone.isNotEmpty ? 'Tel: ${c.phone}' : 'Sin tel';
+                          return ListTile(
+                            dense: true,
+                            title: Text(c.name, style: FontTokens.bodyMedium.copyWith(fontWeight: FontWeight.bold)),
+                            subtitle: Text('$docInfo · $phoneInfo', style: FontTokens.bodySmall),
+                            trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: ColorTokens.primary),
+                            onTap: () {
+                              setState(() {
+                                _nameCtrl.text = c.name;
+                                _phoneCtrl.text = c.phone;
+                                _addressCtrl.text = c.address;
+                                _docIdCtrl.text = c.documentId;
+                                _docType = c.documentType.isNotEmpty ? c.documentType : 'CC';
+                                _customerQuery = '';
+                                _showCustomerResults = false;
+                              });
+                            },
+                          );
+                        }(),
+                      ],
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -2581,27 +2623,32 @@ class _EditCreditSheetState extends ConsumerState<_EditCreditSheet> {
                   border: Border.all(color: ColorTokens.primary),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: matchingProducts.length,
-                  separatorBuilder: (ctx, index) => const Divider(height: 1),
-                  itemBuilder: (ctx, idx) {
-                    final p = matchingProducts[idx];
-                    return ListTile(
-                      dense: true,
-                      title: Text(p.name, style: FontTokens.bodyMedium.copyWith(fontWeight: FontWeight.bold)),
-                      subtitle: Text('SKU: ${p.sku} · Stock: ${p.stock} uds', style: FontTokens.bodySmall),
-                      trailing: Text(currencyFmt.format(p.price), style: FontTokens.moneySmall.copyWith(color: ColorTokens.primary, fontWeight: FontWeight.bold)),
-                      onTap: () {
-                        setState(() {
-                          _productsCtrl.text = p.name;
-                          _totalSaleCtrl.text = p.price.toStringAsFixed(0);
-                          _productQuery = '';
-                          _showProductResults = false;
-                        });
-                      },
-                    );
-                  },
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (int idx = 0; idx < matchingProducts.length; idx++) ...[
+                        if (idx > 0) const Divider(height: 1),
+                        () {
+                          final p = matchingProducts[idx];
+                          return ListTile(
+                            dense: true,
+                            title: Text(p.name, style: FontTokens.bodyMedium.copyWith(fontWeight: FontWeight.bold)),
+                            subtitle: Text('SKU: ${p.sku} · Stock: ${p.stock} uds', style: FontTokens.bodySmall),
+                            trailing: Text(currencyFmt.format(p.price), style: FontTokens.moneySmall.copyWith(color: ColorTokens.primary, fontWeight: FontWeight.bold)),
+                            onTap: () {
+                              setState(() {
+                                _productsCtrl.text = p.name;
+                                _totalSaleCtrl.text = p.price.toStringAsFixed(0);
+                                _productQuery = '';
+                                _showProductResults = false;
+                              });
+                            },
+                          );
+                        }(),
+                      ],
+                    ],
+                  ),
                 ),
               ),
             ],

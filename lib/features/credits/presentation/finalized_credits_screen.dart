@@ -15,7 +15,14 @@ class FinalizedCreditsScreen extends ConsumerStatefulWidget {
 }
 
 class _FinalizedCreditsScreenState extends ConsumerState<FinalizedCreditsScreen> {
+  final TextEditingController _searchCtrl = TextEditingController();
   String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -44,8 +51,20 @@ class _FinalizedCreditsScreenState extends ConsumerState<FinalizedCreditsScreen>
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: CustomTextField(
                   label: '',
+                  controller: _searchCtrl,
                   hint: 'Buscar cliente por nombre o documento…',
                   prefixIcon: const Icon(Icons.search, size: 20, color: ColorTokens.textMuted),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, size: 18, color: ColorTokens.textMuted),
+                          onPressed: () {
+                            _searchCtrl.clear();
+                            setState(() {
+                              _searchQuery = '';
+                            });
+                          },
+                        )
+                      : null,
                   onChanged: (val) {
                     setState(() {
                       _searchQuery = val;

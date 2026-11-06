@@ -7,125 +7,13 @@ class SupabaseCreditRepository implements CreditRepository {
 
   SupabaseCreditRepository(this.client);
 
-  @override
-  Future<List<Credit>> getCredits() async {
-    dynamic response;
-    try {
-      response = await client.from('credits').select('*, credit_installments(*), credit_charges(*), credit_payments(*)').order('created_at', ascending: false);
-    } catch (_) {
-      try {
-        response = await client.from('credits').select('*, credit_installments(*), credit_charges(*)').order('created_at', ascending: false);
-      } catch (_) {
-        // Fallback si la tabla credit_charges aún no ha sido migrada
-        response = await client.from('credits').select('*, credit_installments(*)').order('created_at', ascending: false);
-      }
-    }
+  Credit _parseAndReconcileCredit(Map<String, dynamic> map) {
+    final String creditId = map['id'].toString();
 
-    return (response as List).map((map) {
-      var installmentsList = (map['credit_installments'] as List? ?? []).map((instMap) {
-        final double quotaVal = (instMap['amount'] as num).toDouble();
-        final bool isPaid = instMap['is_paid'] == true;
-        
-        double rawPaid = (instMap['paid_amount'] as num? ?? 0).toDouble();
-        if (rawPaid == 0) {
-          rawPaid = isPaid ? quotaVal : 0.0;
-          final String notesStr = instMap['notes'] ?? '';
-          if (notesStr.contains('Abono: \$')) {
-            try {
-              final part = notesStr.split('Abono: \$')[1].split(' ')[0];
-              rawPaid = double.tryParse(part) ?? rawPaid;
-            } catch (_) {}
-          }
-        }
-
-        return CreditInstallment(
-          quotaNumber: (instMap['number'] as num).toInt(),
-          dueDate: DateTime.parse(instMap['due_date']),
-          quotaValue: quotaVal,
-          paidAmount: rawPaid,
-          paidDate: instMap['paid_at'] != null ? DateTime.parse(instMap['paid_at']) : null,
-          paymentMethod: instMap['payment_method'] ?? '',
-          notes: instMap['notes'] ?? '',
-          receiptImageUrl: instMap['receipt_image_url'],
-        );
-      }).toList();
-
-      installmentsList.sort((a, b) => a.quotaNumber.compareTo(b.quotaNumber));
-
-      final paymentsList = (map['credit_payments'] as List? ?? []).map((pMap) {
-        return CreditPayment(
-          id: pMap['id']?.toString() ?? '',
-          creditId: pMap['credit_id']?.toString() ?? map['id'].toString(),
-          amount: (pMap['amount'] as num? ?? 0).toDouble(),
-          paymentDate: pMap['payment_date'] != null 
-              ? DateTime.parse(pMap['payment_date']) 
-              : (pMap['created_at'] != null ? DateTime.parse(pMap['created_at']) : DateTime.now()),
-          paymentMethod: pMap['payment_method'] ?? 'efectivo',
-          receiptImageUrl: pMap['receipt_image_url'],
-          notes: pMap['notes'] ?? '',
-          shiftId: pMap['shift_id']?.toString(),
-        );
-      }).toList();
-
-      paymentsList.sort((a, b) => b.paymentDate.compareTo(a.paymentDate));
-
-      if (paymentsList.isNotEmpty) {
-        final totalPaid = paymentsList.fold(0.0, (sum, p) => sum + p.amount);
-        installmentsList = Credit.distributePaidAmount(installmentsList, totalPaid);
-      }
-
-      final chargesList = (map['credit_charges'] as List? ?? []).map((chMap) {
-        return CreditCharge(
-          id: chMap['id']?.toString() ?? '',
-          creditId: chMap['credit_id']?.toString() ?? map['id'].toString(),
-          concept: chMap['concept'] ?? 'Cargo Extra',
-          amount: (chMap['amount'] as num? ?? 0).toDouble(),
-          distributionMethod: chMap['distribution_method'] ?? 'distribute_remaining',
-          createdAt: chMap['created_at'] != null ? DateTime.parse(chMap['created_at']) : DateTime.now(),
-          createdBy: chMap['created_by'] ?? 'Administrador',
-          notes: chMap['notes'] ?? '',
-        );
-      }).toList();
-
-      chargesList.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-
-      return Credit(
-        id: map['id'].toString(),
-        clientName: map['customer_name'] ?? '',
-        clientPhone: map['customer_phone'] ?? '',
-        clientAddress: map['customer_address'] ?? '',
-        products: map['products'] ?? 'Productos Varios',
-        totalSale: (map['total_amount'] as num).toDouble(),
-        startDate: DateTime.parse(map['created_at']),
-        paymentFrequency: map['payment_frequency'] ?? 'semanal',
-        totalQuotas: (map['installments_count'] as num).toInt(),
-        quotaValue: installmentsList.isNotEmpty ? installmentsList.first.quotaValue : 0.0,
-        installments: installmentsList,
-        charges: chargesList,
-        payments: paymentsList,
-        generalNotes: map['notes'] ?? '',
-      );
-    }).toList();
-  }
-
-  @override
-  Future<Credit?> getCreditById(String id) async {
-    dynamic response;
-    try {
-      response = await client.from('credits').select('*, credit_installments(*), credit_charges(*), credit_payments(*)').eq('id', id).maybeSingle();
-    } catch (_) {
-      try {
-        response = await client.from('credits').select('*, credit_installments(*), credit_charges(*)').eq('id', id).maybeSingle();
-      } catch (_) {
-        response = await client.from('credits').select('*, credit_installments(*)').eq('id', id).maybeSingle();
-      }
-    }
-    if (response == null) return null;
-
-    var installmentsList = (response['credit_installments'] as List? ?? []).map((instMap) {
+    final rawInstallments = (map['credit_installments'] as List? ?? []).map((instMap) {
       final double quotaVal = (instMap['amount'] as num).toDouble();
       final bool isPaid = instMap['is_paid'] == true;
-      
+
       double rawPaid = (instMap['paid_amount'] as num? ?? 0).toDouble();
       if (rawPaid == 0) {
         rawPaid = isPaid ? quotaVal : 0.0;
@@ -150,15 +38,13 @@ class SupabaseCreditRepository implements CreditRepository {
       );
     }).toList();
 
-    installmentsList.sort((a, b) => a.quotaNumber.compareTo(b.quotaNumber));
-
-    final paymentsList = (response['credit_payments'] as List? ?? []).map((pMap) {
+    final rawPayments = (map['credit_payments'] as List? ?? []).map((pMap) {
       return CreditPayment(
         id: pMap['id']?.toString() ?? '',
-        creditId: pMap['credit_id']?.toString() ?? response['id'].toString(),
+        creditId: pMap['credit_id']?.toString() ?? creditId,
         amount: (pMap['amount'] as num? ?? 0).toDouble(),
-        paymentDate: pMap['payment_date'] != null 
-            ? DateTime.parse(pMap['payment_date']) 
+        paymentDate: pMap['payment_date'] != null
+            ? DateTime.parse(pMap['payment_date'])
             : (pMap['created_at'] != null ? DateTime.parse(pMap['created_at']) : DateTime.now()),
         paymentMethod: pMap['payment_method'] ?? 'efectivo',
         receiptImageUrl: pMap['receipt_image_url'],
@@ -167,17 +53,37 @@ class SupabaseCreditRepository implements CreditRepository {
       );
     }).toList();
 
-    paymentsList.sort((a, b) => b.paymentDate.compareTo(a.paymentDate));
+    final reconciled = Credit.reconcileInstallmentsAndPayments(
+      creditId,
+      rawInstallments,
+      rawPayments,
+    );
 
-    if (paymentsList.isNotEmpty) {
-      final totalPaid = paymentsList.fold(0.0, (sum, p) => sum + p.amount);
-      installmentsList = Credit.distributePaidAmount(installmentsList, totalPaid);
+    final bool hasDirtyPaymentNotes = rawPayments.any(
+      (p) => p.notes != Credit.cleanAbonoNotes(p.notes),
+    );
+    final bool hasDirtyInstNotes = rawInstallments.any(
+      (i) => i.notes != Credit.cleanAbonoNotes(i.notes),
+    );
+
+    if (reconciled.needsInstallmentsRepair ||
+        reconciled.missingPaymentsToInsert.isNotEmpty ||
+        hasDirtyPaymentNotes ||
+        hasDirtyInstNotes) {
+      _autoRepairCreditInBackground(
+        creditId: creditId,
+        repairedInstallments: reconciled.installments,
+        rawPayments: rawPayments,
+        needsInstallmentsRepair: reconciled.needsInstallmentsRepair || hasDirtyInstNotes,
+        missingPaymentsToInsert: reconciled.missingPaymentsToInsert,
+        cleanPaymentNotes: hasDirtyPaymentNotes,
+      );
     }
 
-    final chargesList = (response['credit_charges'] as List? ?? []).map((chMap) {
+    final chargesList = (map['credit_charges'] as List? ?? []).map((chMap) {
       return CreditCharge(
         id: chMap['id']?.toString() ?? '',
-        creditId: chMap['credit_id']?.toString() ?? response['id'].toString(),
+        creditId: chMap['credit_id']?.toString() ?? creditId,
         concept: chMap['concept'] ?? 'Cargo Extra',
         amount: (chMap['amount'] as num? ?? 0).toDouble(),
         distributionMethod: chMap['distribution_method'] ?? 'distribute_remaining',
@@ -190,21 +96,118 @@ class SupabaseCreditRepository implements CreditRepository {
     chargesList.sort((a, b) => a.createdAt.compareTo(b.createdAt));
 
     return Credit(
-      id: response['id'].toString(),
-      clientName: response['customer_name'] ?? '',
-      clientPhone: response['customer_phone'] ?? '',
-      clientAddress: response['customer_address'] ?? '',
-      products: response['products'] ?? 'Productos Varios',
-      totalSale: (response['total_amount'] as num).toDouble(),
-      startDate: DateTime.parse(response['created_at']),
-      paymentFrequency: response['payment_frequency'] ?? 'semanal',
-      totalQuotas: (response['installments_count'] as num).toInt(),
-      quotaValue: installmentsList.isNotEmpty ? installmentsList.first.quotaValue : 0.0,
-      installments: installmentsList,
+      id: creditId,
+      clientName: map['customer_name'] ?? '',
+      clientPhone: map['customer_phone'] ?? '',
+      clientAddress: map['customer_address'] ?? '',
+      products: map['products'] ?? 'Productos Varios',
+      totalSale: (map['total_amount'] as num).toDouble(),
+      startDate: DateTime.parse(map['created_at']),
+      paymentFrequency: map['payment_frequency'] ?? 'semanal',
+      totalQuotas: (map['installments_count'] as num).toInt(),
+      quotaValue: reconciled.installments.isNotEmpty ? reconciled.installments.first.quotaValue : 0.0,
+      installments: reconciled.installments,
       charges: chargesList,
-      payments: paymentsList,
-      generalNotes: response['notes'] ?? '',
+      payments: reconciled.payments,
+      generalNotes: map['notes'] ?? '',
     );
+  }
+
+  static final Set<String> _repairedCreditIds = {};
+  static Future<void> _repairChain = Future.value();
+
+  void _autoRepairCreditInBackground({
+    required String creditId,
+    required List<CreditInstallment> repairedInstallments,
+    required List<CreditPayment> rawPayments,
+    required bool needsInstallmentsRepair,
+    required List<CreditPayment> missingPaymentsToInsert,
+    required bool cleanPaymentNotes,
+  }) {
+    if (_repairedCreditIds.contains(creditId)) return;
+    _repairedCreditIds.add(creditId);
+
+    _repairChain = _repairChain.then((_) async {
+      try {
+        await Future.delayed(const Duration(milliseconds: 150));
+        if (needsInstallmentsRepair) {
+          for (final inst in repairedInstallments) {
+            await client
+                .from('credit_installments')
+                .update({
+                  'paid_amount': inst.paidAmount,
+                  'is_paid': inst.paidAmount >= inst.quotaValue && inst.quotaValue > 0,
+                  'paid_at': inst.paidDate?.toIso8601String(),
+                  'payment_method': inst.paymentMethod,
+                  'notes': Credit.cleanAbonoNotes(inst.notes),
+                })
+                .eq('credit_id', creditId)
+                .eq('number', inst.quotaNumber);
+          }
+        }
+
+        if (missingPaymentsToInsert.isNotEmpty) {
+          for (final p in missingPaymentsToInsert) {
+            await client.from('credit_payments').insert({
+              'credit_id': creditId,
+              'amount': p.amount,
+              'payment_date': p.paymentDate.toIso8601String(),
+              'payment_method': p.paymentMethod,
+              'receipt_image_url': p.receiptImageUrl,
+              'notes': Credit.cleanAbonoNotes(p.notes),
+            });
+          }
+        }
+
+        if (cleanPaymentNotes) {
+          for (final p in rawPayments) {
+            final cleaned = Credit.cleanAbonoNotes(p.notes);
+            if (p.id.isNotEmpty && p.notes != cleaned) {
+              await client
+                  .from('credit_payments')
+                  .update({'notes': cleaned})
+                  .eq('id', p.id);
+            }
+          }
+        }
+      } catch (_) {}
+    });
+  }
+
+  @override
+  Future<List<Credit>> getCredits() async {
+    dynamic response;
+    try {
+      response = await client.from('credits').select('*, credit_installments(*), credit_charges(*), credit_payments(*)').order('created_at', ascending: false);
+    } catch (_) {
+      try {
+        response = await client.from('credits').select('*, credit_installments(*), credit_charges(*)').order('created_at', ascending: false);
+      } catch (_) {
+        // Fallback si la tabla credit_charges aún no ha sido migrada
+        response = await client.from('credits').select('*, credit_installments(*)').order('created_at', ascending: false);
+      }
+    }
+
+    return (response as List)
+        .map((map) => _parseAndReconcileCredit(Map<String, dynamic>.from(map)))
+        .toList();
+  }
+
+  @override
+  Future<Credit?> getCreditById(String id) async {
+    dynamic response;
+    try {
+      response = await client.from('credits').select('*, credit_installments(*), credit_charges(*), credit_payments(*)').eq('id', id).maybeSingle();
+    } catch (_) {
+      try {
+        response = await client.from('credits').select('*, credit_installments(*), credit_charges(*)').eq('id', id).maybeSingle();
+      } catch (_) {
+        response = await client.from('credits').select('*, credit_installments(*)').eq('id', id).maybeSingle();
+      }
+    }
+    if (response == null) return null;
+
+    return _parseAndReconcileCredit(Map<String, dynamic>.from(response));
   }
 
   @override
@@ -317,7 +320,7 @@ class SupabaseCreditRepository implements CreditRepository {
         'is_paid': inst.paidAmount >= inst.quotaValue,
         'paid_at': inst.paidDate?.toIso8601String(),
         'payment_method': inst.paymentMethod,
-        'notes': inst.notes,
+        'notes': Credit.cleanAbonoNotes(inst.notes),
         'receipt_image_url': inst.receiptImageUrl,
       });
     }
@@ -337,18 +340,16 @@ class SupabaseCreditRepository implements CreditRepository {
     }).eq('id', credit.id);
 
     for (var inst in credit.installments) {
-      final String formattedNotes = inst.paidAmount > 0
-          ? 'Abono: \$${inst.paidAmount.toInt()} ${inst.notes}'.trim()
-          : inst.notes;
+      final String cleanedNotes = Credit.cleanAbonoNotes(inst.notes);
 
       await client.from('credit_installments').update({
         'amount': inst.quotaValue,
         'paid_amount': inst.paidAmount,
         'due_date': inst.dueDate.toIso8601String(),
-        'is_paid': inst.paidAmount >= inst.quotaValue,
+        'is_paid': inst.paidAmount >= inst.quotaValue && inst.quotaValue > 0,
         'paid_at': inst.paidDate?.toIso8601String(),
         'payment_method': inst.paymentMethod,
-        'notes': formattedNotes,
+        'notes': cleanedNotes,
         'receipt_image_url': inst.receiptImageUrl,
       }).eq('credit_id', credit.id).eq('number', inst.quotaNumber);
     }
@@ -356,6 +357,9 @@ class SupabaseCreditRepository implements CreditRepository {
 
   @override
   Future<void> deleteCredit(String creditId) async {
+    try {
+      await client.from('credit_payments').delete().eq('credit_id', creditId);
+    } catch (_) {}
     try {
       await client.from('credit_charges').delete().eq('credit_id', creditId);
     } catch (_) {}
@@ -392,19 +396,17 @@ class SupabaseCreditRepository implements CreditRepository {
       final existingNumbers = (existingInsts as List).map((i) => (i['number'] as num).toInt()).toSet();
 
       for (var inst in updatedCredit.installments) {
-        final String formattedNotes = inst.paidAmount > 0
-            ? 'Abono: \$${inst.paidAmount.toInt()} ${inst.notes}'.trim()
-            : inst.notes;
+        final String cleanedNotes = Credit.cleanAbonoNotes(inst.notes);
 
         if (existingNumbers.contains(inst.quotaNumber)) {
           await client.from('credit_installments').update({
             'amount': inst.quotaValue,
             'paid_amount': inst.paidAmount,
             'due_date': inst.dueDate.toIso8601String(),
-            'is_paid': inst.paidAmount >= inst.quotaValue,
+            'is_paid': inst.paidAmount >= inst.quotaValue && inst.quotaValue > 0,
             'paid_at': inst.paidDate?.toIso8601String(),
             'payment_method': inst.paymentMethod,
-            'notes': formattedNotes,
+            'notes': cleanedNotes,
             'receipt_image_url': inst.receiptImageUrl,
           }).eq('credit_id', creditId).eq('number', inst.quotaNumber);
         } else {
@@ -414,10 +416,10 @@ class SupabaseCreditRepository implements CreditRepository {
             'amount': inst.quotaValue,
             'paid_amount': inst.paidAmount,
             'due_date': inst.dueDate.toIso8601String(),
-            'is_paid': inst.paidAmount >= inst.quotaValue,
+            'is_paid': inst.paidAmount >= inst.quotaValue && inst.quotaValue > 0,
             'paid_at': inst.paidDate?.toIso8601String(),
             'payment_method': inst.paymentMethod,
-            'notes': formattedNotes,
+            'notes': cleanedNotes,
             'receipt_image_url': inst.receiptImageUrl,
           });
         }
@@ -450,15 +452,14 @@ class SupabaseCreditRepository implements CreditRepository {
         'payment_date': payment.paymentDate.toIso8601String(),
         'payment_method': payment.paymentMethod,
         'receipt_image_url': payment.receiptImageUrl,
-        'notes': payment.notes,
+        'notes': Credit.cleanAbonoNotes(payment.notes),
         if (payment.shiftId != null && payment.shiftId!.isNotEmpty) 'shift_id': payment.shiftId,
       });
     } catch (e) {
       // Ignorar si aún no se ha ejecutado la migración de credit_payments
     }
 
-    // 2. Actualizar crédito y cuotas amortizadas en Supabase
+    // 2. Actualizar crédito y cuotas en Supabase
     await updateCredit(updatedCredit);
   }
 }
-

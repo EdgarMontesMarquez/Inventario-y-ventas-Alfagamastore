@@ -33,10 +33,8 @@ class CustomOverlays {
         final keyboardHeight = mediaQuery.viewInsets.bottom;
         final availableHeight = mediaQuery.size.height * 0.85;
 
-        return AnimatedPadding(
+        return Padding(
           padding: EdgeInsets.only(bottom: keyboardHeight),
-          duration: const Duration(milliseconds: 150),
-          curve: Curves.decelerate,
           child: Container(
             constraints: BoxConstraints(maxHeight: availableHeight),
             padding: const EdgeInsets.only(

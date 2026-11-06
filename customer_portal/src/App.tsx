@@ -486,7 +486,15 @@ export function App() {
 
           const totalAmt = Number(c.total_amount || 0);
 
-          const parsedPayments: CreditPayment[] = paymentList.map((p: any) => {
+          const cleanAbonoNotes = (rawNotes?: string) => {
+            if (!rawNotes) return '';
+            return rawNotes
+              .replace(/Abono:\s*\$[0-9.,]+\s*/gi, '')
+              .replace(/^Abono previo registrado$/i, '')
+              .trim();
+          };
+
+          let parsedPayments: CreditPayment[] = paymentList.map((p: any) => {
             const pDate = p.payment_date || p.created_at || new Date().toISOString();
             return {
               id: String(p.id),
@@ -494,14 +502,11 @@ export function App() {
               amount: Number(p.amount || 0),
               payment_date: pDate,
               payment_method: p.payment_method || 'efectivo',
-              notes: p.notes,
+              notes: cleanAbonoNotes(p.notes),
               receipt_image_url: p.receipt_image_url,
               created_at: p.created_at || pDate
             };
           });
-
-          const rawTotalPaidFromPayments = parsedPayments.reduce((sum, p) => sum + p.amount, 0);
-          const paidAmt = parsedPayments.length > 0 ? rawTotalPaidFromPayments : Number(c.paid_amount || 0);
 
           let parsedInstallments: CreditInstallment[] = instList.map((inst: any) => ({
             id: String(inst.id),
@@ -513,23 +518,77 @@ export function App() {
             is_paid: Boolean(inst.is_paid),
             paid_at: inst.paid_at,
             payment_method: inst.payment_method,
-            notes: inst.notes,
+            notes: cleanAbonoNotes(inst.notes),
             receipt_image_url: inst.receipt_image_url
           })).sort((a, b) => a.number - b.number);
 
-          if (parsedPayments.length > 0) {
-            let remaining = paidAmt;
-            parsedInstallments = parsedInstallments.map(inst => {
-              const quotaVal = inst.amount;
-              const paidForThis = Math.min(quotaVal, Math.max(0, remaining));
-              remaining -= paidForThis;
+          // Reconciliar cuotas alteradas por cascada vs pagos reales cronológicos
+          const hasCascadedInstallments =
+            parsedPayments.length > 0 &&
+            parsedInstallments.some(i => i.paid_amount > 0 && !i.paid_at);
+
+          if (hasCascadedInstallments) {
+            const chronoPayments = [...parsedPayments].sort(
+              (a, b) => new Date(a.payment_date || a.created_at).getTime() - new Date(b.payment_date || b.created_at).getTime()
+            );
+            parsedInstallments = parsedInstallments.map((inst, idx) => {
+              if (idx < chronoPayments.length) {
+                const p = chronoPayments[idx];
+                return {
+                  ...inst,
+                  paid_amount: p.amount,
+                  paid_at: p.payment_date || p.created_at,
+                  payment_method: p.payment_method || inst.payment_method,
+                  notes: p.notes || inst.notes,
+                  receipt_image_url: p.receipt_image_url || inst.receipt_image_url,
+                  is_paid: p.amount >= inst.amount && inst.amount > 0
+                };
+              }
               return {
                 ...inst,
-                paid_amount: paidForThis,
-                is_paid: paidForThis >= quotaVal && quotaVal > 0
+                paid_amount: 0,
+                paid_at: undefined,
+                payment_method: '',
+                notes: '',
+                receipt_image_url: undefined,
+                is_paid: false
               };
             });
+          } else {
+            // Sintetizar pagos faltantes si alguna cuota pagada con fecha no está en credit_payments
+            const sumInstPaid = parsedInstallments.reduce((s, i) => s + i.paid_amount, 0);
+            const sumPayPaid = parsedPayments.reduce((s, p) => s + p.amount, 0);
+            if (sumInstPaid > sumPayPaid + 0.01) {
+              for (const inst of parsedInstallments) {
+                if (inst.paid_amount > 0 && inst.paid_at) {
+                  const instMs = new Date(inst.paid_at).getTime();
+                  const exists = parsedPayments.some(
+                    p => Math.abs(p.amount - inst.paid_amount) < 0.01 &&
+                      Math.abs(new Date(p.payment_date || p.created_at).getTime() - instMs) < 120000
+                  );
+                  if (!exists) {
+                    parsedPayments.push({
+                      id: `sync_${c.id}_${inst.number}`,
+                      credit_id: String(c.id),
+                      amount: inst.paid_amount,
+                      payment_date: inst.paid_at,
+                      payment_method: inst.payment_method || 'efectivo',
+                      notes: inst.notes,
+                      receipt_image_url: inst.receipt_image_url,
+                      created_at: inst.paid_at
+                    });
+                  }
+                }
+              }
+              parsedPayments.sort(
+                (a, b) => new Date(b.payment_date || b.created_at).getTime() - new Date(a.payment_date || a.created_at).getTime()
+              );
+            }
           }
+
+          const rawTotalPaidFromPayments = parsedPayments.reduce((sum, p) => sum + p.amount, 0);
+          const rawTotalPaidFromInsts = parsedInstallments.reduce((sum, i) => sum + i.paid_amount, 0);
+          const paidAmt = Math.max(rawTotalPaidFromPayments, rawTotalPaidFromInsts, Number(c.paid_amount || 0));
 
           return {
             id: String(c.id),

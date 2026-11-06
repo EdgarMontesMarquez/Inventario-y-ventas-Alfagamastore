@@ -69,7 +69,7 @@ class InstallmentTable extends StatelessWidget {
             child: DataTable(
               headingRowColor: WidgetStateProperty.all(headerBg),
               dataRowMinHeight: 40,
-              dataRowMaxHeight: 40,
+              dataRowMaxHeight: 44,
               columnSpacing: 18,
               horizontalMargin: 16,
               headingTextStyle: FontTokens.bodySmall.copyWith(color: textMuted, fontWeight: FontWeight.bold),
@@ -86,7 +86,9 @@ class InstallmentTable extends StatelessWidget {
                 final inst = row.inst;
                 final s = isCreditFullyPaid ? 'pagado' : inst.status;
                 final isEven = index % 2 == 0;
-                final quotaBalance = (inst.quotaValue - inst.paidAmount).clamp(0.0, double.infinity);
+                final quotaBalance = isCreditFullyPaid
+                    ? 0.0
+                    : (inst.quotaValue - inst.paidAmount).clamp(0.0, double.infinity);
 
                 final rowColor = isEven
                     ? cardBg
@@ -107,12 +109,27 @@ class InstallmentTable extends StatelessWidget {
                       ),
                     ),
                     DataCell(
-                      Text(
-                        dateFmt.format(inst.dueDate),
-                        style: textStyle.copyWith(
-                          color: s == 'vencido' ? ColorTokens.statusDanger : textMuted,
-                          fontSize: 11,
-                        ),
+                      Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            dateFmt.format(inst.dueDate),
+                            style: textStyle.copyWith(
+                              color: s == 'vencido' ? ColorTokens.statusDanger : textMuted,
+                              fontSize: 11,
+                            ),
+                          ),
+                          if (inst.paidDate != null && inst.paidAmount > 0)
+                            Text(
+                              'Pagó: ${dateFmt.format(inst.paidDate!)}',
+                              style: textStyle.copyWith(
+                                color: ColorTokens.statusSuccess,
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                     DataCell(
@@ -157,4 +174,3 @@ class _RowData {
 
   _RowData({required this.inst, required this.balance});
 }
-

@@ -536,13 +536,13 @@ class OfflineSyncManager {
             paidAmount: rawPaid,
             paidDate: instMap['paid_at'] != null ? DateTime.parse(instMap['paid_at']) : null,
             paymentMethod: instMap['payment_method'] ?? '',
-            notes: instMap['notes'] ?? '',
+            notes: Credit.cleanAbonoNotes(instMap['notes'] ?? ''),
             receiptImageUrl: instMap['receipt_image_url'],
           );
         }).toList();
         insts.sort((a, b) => a.quotaNumber.compareTo(b.quotaNumber));
 
-        final paymentsList = (map['credit_payments'] as List? ?? []).map((pMap) {
+        var paymentsList = (map['credit_payments'] as List? ?? []).map((pMap) {
           return CreditPayment(
             id: pMap['id']?.toString() ?? '',
             creditId: pMap['credit_id']?.toString() ?? map['id'].toString(),
@@ -552,16 +552,19 @@ class OfflineSyncManager {
                 : (pMap['created_at'] != null ? DateTime.parse(pMap['created_at']) : DateTime.now()),
             paymentMethod: pMap['payment_method'] ?? 'efectivo',
             receiptImageUrl: pMap['receipt_image_url'],
-            notes: pMap['notes'] ?? '',
+            notes: Credit.cleanAbonoNotes(pMap['notes'] ?? ''),
             shiftId: pMap['shift_id']?.toString(),
           );
         }).toList();
         paymentsList.sort((a, b) => b.paymentDate.compareTo(a.paymentDate));
 
-        if (paymentsList.isNotEmpty) {
-          final totalPaid = paymentsList.fold(0.0, (sum, p) => sum + p.amount);
-          insts = Credit.distributePaidAmount(insts, totalPaid);
-        }
+        final reconciled = Credit.reconcileInstallmentsAndPayments(
+          map['id'].toString(),
+          insts,
+          paymentsList,
+        );
+        insts = reconciled.installments;
+        paymentsList = reconciled.payments;
 
         final charges = (map['credit_charges'] as List? ?? []).map((chMap) => CreditCharge(
           id: chMap['id']?.toString() ?? '',

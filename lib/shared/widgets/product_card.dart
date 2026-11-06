@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../models/product.dart';
 import '../../core/design_system/tokens/color_tokens.dart';
@@ -13,6 +14,8 @@ class ProductCard extends StatelessWidget {
   final Product product;
   final VoidCallback onTap;
   final bool isEmpleado;
+
+  static final Map<int, Uint8List> _base64Cache = {};
 
   const ProductCard({
     super.key,
@@ -31,18 +34,33 @@ class ProductCard extends StatelessWidget {
     Widget imgWidget;
     if (clean.startsWith('data:image') || clean.length > 500) {
       try {
-        final base64Str = clean.contains(',') ? clean.split(',').last : clean;
-        final bytes = base64Decode(base64Str);
-        imgWidget = Image.memory(bytes, fit: BoxFit.cover, width: 85, height: double.infinity);
+        final key = clean.hashCode;
+        var bytes = _base64Cache[key];
+        if (bytes == null) {
+          final base64Str = clean.contains(',') ? clean.split(',').last : clean;
+          bytes = base64Decode(base64Str);
+          if (_base64Cache.length > 150) {
+            _base64Cache.clear();
+          }
+          _base64Cache[key] = bytes;
+        }
+        imgWidget = Image.memory(
+          bytes,
+          fit: BoxFit.cover,
+          width: 85,
+          height: double.infinity,
+          cacheWidth: 160,
+          gaplessPlayback: true,
+        );
       } catch (_) {
         imgWidget = Container(width: 85, color: ColorTokens.lightBgSecondary, child: const Icon(Icons.inventory_2_outlined, color: ColorTokens.lightTextSecondary));
       }
     } else if (clean.startsWith('http://') || clean.startsWith('https://')) {
-      imgWidget = Image.network(clean, fit: BoxFit.cover, width: 85, height: double.infinity, errorBuilder: (c, e, s) => Container(width: 85, color: ColorTokens.lightBgSecondary, child: const Icon(Icons.broken_image_outlined, color: ColorTokens.lightTextSecondary)));
+      imgWidget = Image.network(clean, fit: BoxFit.cover, width: 85, height: double.infinity, cacheWidth: 160, errorBuilder: (c, e, s) => Container(width: 85, color: ColorTokens.lightBgSecondary, child: const Icon(Icons.broken_image_outlined, color: ColorTokens.lightTextSecondary)));
     } else {
       final f = File(clean);
       if (f.existsSync()) {
-        imgWidget = Image.file(f, fit: BoxFit.cover, width: 85, height: double.infinity);
+        imgWidget = Image.file(f, fit: BoxFit.cover, width: 85, height: double.infinity, cacheWidth: 160);
       } else {
         imgWidget = Container(width: 85, color: ColorTokens.lightBgSecondary, child: const Icon(Icons.inventory_2_outlined, color: ColorTokens.lightTextSecondary));
       }

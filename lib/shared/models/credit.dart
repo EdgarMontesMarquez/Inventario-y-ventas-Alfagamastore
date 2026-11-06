@@ -25,6 +25,7 @@ class CreditInstallment {
     double? quotaValue,
     double? paidAmount,
     DateTime? paidDate,
+    bool clearPaidDate = false,
     String? paymentMethod,
     String? notes,
     String? receiptImageUrl,
@@ -34,7 +35,7 @@ class CreditInstallment {
       dueDate: dueDate ?? this.dueDate,
       quotaValue: quotaValue ?? this.quotaValue,
       paidAmount: paidAmount ?? this.paidAmount,
-      paidDate: paidDate ?? this.paidDate,
+      paidDate: clearPaidDate ? null : (paidDate ?? this.paidDate),
       paymentMethod: paymentMethod ?? this.paymentMethod,
       notes: notes ?? this.notes,
       receiptImageUrl: receiptImageUrl ?? this.receiptImageUrl,
@@ -208,42 +209,143 @@ class Credit {
     );
   }
 
+  /// Limpia prefijos repetidos como "Abono: $50000 Abono: $50000" dejando solo la observación real
+  static String cleanAbonoNotes(String rawNotes) {
+    if (rawNotes.trim().isEmpty) return '';
+    return rawNotes
+        .replaceAll(RegExp(r'Abono:\s*\$?\d+(\.\d+)?', caseSensitive: false), '')
+        .replaceAll(RegExp(r'Abono previo registrado', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+  }
+
   double get totalPaid {
-    if (payments.isNotEmpty) {
-      return payments.fold(0.0, (sum, p) => sum + p.amount);
-    }
-    return installments.fold(0.0, (sum, item) => sum + item.paidAmount);
+    final instTotal = installments.fold(0.0, (sum, item) => sum + item.paidAmount);
+    final payTotal = payments.fold(0.0, (sum, p) => sum + p.amount);
+    return instTotal >= payTotal ? instTotal : payTotal;
   }
 
-  /// Distribuye el total pagado entre las cuotas en cascada (waterfall)
-  static List<CreditInstallment> distributePaidAmount(
+  /// Reconcilia cuotas y abonos históricos, corrigiendo cuotas que hayan sido
+  /// alteradas en cascada sin fecha de pago (paidDate == null con paidAmount > 0)
+  /// y limpiando notas duplicadas.
+  static ({
+    List<CreditInstallment> installments,
+    List<CreditPayment> payments,
+    bool needsInstallmentsRepair,
+    List<CreditPayment> missingPaymentsToInsert,
+  }) reconcileInstallmentsAndPayments(
+    String creditId,
     List<CreditInstallment> baseInstallments,
-    double totalPaidToDistribute,
+    List<CreditPayment> basePayments,
   ) {
-    double remaining = totalPaidToDistribute;
-    return baseInstallments.map((inst) {
-      if (remaining <= 0) {
-        return inst.copyWith(paidAmount: 0.0);
+    var installments = baseInstallments
+        .map((i) => i.copyWith(notes: cleanAbonoNotes(i.notes)))
+        .toList()
+      ..sort((a, b) => a.quotaNumber.compareTo(b.quotaNumber));
+
+    var payments = basePayments
+        .map((p) => p.copyWith(notes: cleanAbonoNotes(p.notes)))
+        .toList();
+
+    bool needsInstallmentsRepair = false;
+    final List<CreditPayment> missingPaymentsToInsert = [];
+
+    // Detectar si las cuotas fueron alteradas por la antigua distribución en cascada
+    // (cuotas con paidAmount > 0 pero sin paidDate cuando existen abonos en credit_payments)
+    final bool wasCascaded = payments.isNotEmpty &&
+        installments.any((i) => i.paidAmount > 0 && i.paidDate == null);
+
+    if (wasCascaded) {
+      needsInstallmentsRepair = true;
+      final chronologicalPayments = List<CreditPayment>.from(payments)
+        ..sort((a, b) => a.paymentDate.compareTo(b.paymentDate));
+
+      installments = List.generate(installments.length, (idx) {
+        final inst = installments[idx];
+        if (idx < chronologicalPayments.length) {
+          final p = chronologicalPayments[idx];
+          return inst.copyWith(
+            paidAmount: p.amount,
+            paidDate: p.paymentDate,
+            paymentMethod: p.paymentMethod,
+            notes: cleanAbonoNotes(p.notes),
+            receiptImageUrl: p.receiptImageUrl ?? inst.receiptImageUrl,
+          );
+        } else {
+          return inst.copyWith(
+            paidAmount: 0.0,
+            clearPaidDate: true,
+            paymentMethod: '',
+            notes: '',
+          );
+        }
+      });
+    } else {
+      // Si hay cuotas pagadas con fecha que aún no están en credit_payments, agregarlas
+      for (final inst in installments) {
+        if (inst.paidAmount > 0 && inst.paidDate != null) {
+          final alreadyExists = payments.any((p) =>
+              (p.amount - inst.paidAmount).abs() < 1 &&
+              p.paymentDate.difference(inst.paidDate!).inMinutes.abs() <= 5);
+          if (!alreadyExists) {
+            final synthesized = CreditPayment(
+              id: 'sync_${creditId}_${inst.quotaNumber}',
+              creditId: creditId,
+              amount: inst.paidAmount,
+              paymentDate: inst.paidDate!,
+              paymentMethod: inst.paymentMethod.isNotEmpty ? inst.paymentMethod : 'efectivo',
+              receiptImageUrl: inst.receiptImageUrl,
+              notes: cleanAbonoNotes(inst.notes),
+            );
+            payments.add(synthesized);
+            missingPaymentsToInsert.add(synthesized);
+          }
+        }
       }
-      if (remaining >= inst.quotaValue) {
-        remaining -= inst.quotaValue;
-        return inst.copyWith(paidAmount: inst.quotaValue);
-      } else {
-        final paidForThis = remaining;
-        remaining = 0;
-        return inst.copyWith(paidAmount: paidForThis);
-      }
-    }).toList();
+    }
+
+    payments.sort((a, b) => b.paymentDate.compareTo(a.paymentDate));
+
+    return (
+      installments: installments,
+      payments: payments,
+      needsInstallmentsRepair: needsInstallmentsRepair,
+      missingPaymentsToInsert: missingPaymentsToInsert,
+    );
   }
 
-  /// Agrega un nuevo abono/pago y redistribuye las cuotas en cascada
-  Credit addPayment(CreditPayment payment) {
-    final newPayments = List<CreditPayment>.from(payments)..add(payment);
-    final total = newPayments.fold(0.0, (sum, p) => sum + p.amount);
-    final amortizedInstallments = distributePaidAmount(installments, total);
+  /// Agrega un nuevo abono a la cuota seleccionada sin alterar las demás cuotas futuras
+  Credit addPayment(CreditPayment payment, {int? quotaIndex}) {
+    final cleanedPayment = payment.copyWith(notes: cleanAbonoNotes(payment.notes));
+    final newPayments = [cleanedPayment, ...payments];
+    newPayments.sort((a, b) => b.paymentDate.compareTo(a.paymentDate));
+
+    final updatedInstallments = List<CreditInstallment>.from(installments);
+    if (updatedInstallments.isNotEmpty) {
+      int targetIdx = quotaIndex ?? updatedInstallments.indexWhere((i) => i.status != 'pagado');
+      if (targetIdx < 0 || targetIdx >= updatedInstallments.length) {
+        targetIdx = updatedInstallments.length - 1;
+      }
+      final targetInst = updatedInstallments[targetIdx];
+      final cleanOldNote = cleanAbonoNotes(targetInst.notes);
+      final cleanNewNote = cleanedPayment.notes;
+      final combinedNote = [cleanOldNote, cleanNewNote]
+          .where((s) => s.isNotEmpty)
+          .toSet()
+          .join(' | ');
+
+      updatedInstallments[targetIdx] = targetInst.copyWith(
+        paidAmount: targetInst.paidAmount + cleanedPayment.amount,
+        paidDate: cleanedPayment.paymentDate,
+        paymentMethod: cleanedPayment.paymentMethod,
+        notes: combinedNote,
+        receiptImageUrl: cleanedPayment.receiptImageUrl ?? targetInst.receiptImageUrl,
+      );
+    }
+
     return copyWith(
       payments: newPayments,
-      installments: amortizedInstallments,
+      installments: updatedInstallments,
     );
   }
 

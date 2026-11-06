@@ -23,7 +23,14 @@ class CustomersScreen extends ConsumerStatefulWidget {
 }
 
 class _CustomersScreenState extends ConsumerState<CustomersScreen> {
+  final TextEditingController _searchCtrl = TextEditingController();
   String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
 
   void _openNewCustomerSheet() {
     CustomOverlays.showBottomSheet(
@@ -129,8 +136,20 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                     const SizedBox(height: 12),
                     CustomTextField(
                       label: '',
+                      controller: _searchCtrl,
                       hint: 'Buscar por nombre o teléfono…',
                       prefixIcon: const Icon(Icons.search, size: 20, color: ColorTokens.textMuted),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, size: 18, color: ColorTokens.textMuted),
+                              onPressed: () {
+                                _searchCtrl.clear();
+                                setState(() {
+                                  _searchQuery = '';
+                                });
+                              },
+                            )
+                          : null,
                       onChanged: (val) {
                         setState(() {
                           _searchQuery = val;

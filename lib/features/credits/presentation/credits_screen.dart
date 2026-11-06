@@ -30,7 +30,14 @@ class CreditsScreen extends ConsumerStatefulWidget {
 }
 
 class _CreditsScreenState extends ConsumerState<CreditsScreen> {
+  final TextEditingController _searchCtrl = TextEditingController();
   String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
 
   void _openNewCreditSheet(BuildContext context) {
     if (ref.read(authProvider).isEmpleado) {
@@ -148,116 +155,137 @@ class _CreditsScreenState extends ConsumerState<CreditsScreen> {
             onRefresh: () async {
               ref.invalidate(creditsFutureProvider);
             },
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              physics: const AlwaysScrollableScrollPhysics(),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // KPI Header Cards
-                  Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: ColorTokens.surface,
-                            border: Border.all(color: ColorTokens.border),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('COBRADO (RECAUDO)', style: FontTokens.label.copyWith(fontSize: 8, color: ColorTokens.primary)),
-                              const SizedBox(height: 4),
-                              Text(
-                                CurrencyUtils.format(totalCobrado),
-                                style: FontTokens.bodyMedium.copyWith(color: ColorTokens.primary, fontWeight: FontWeight.bold),
+                      // KPI Header Cards
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: ColorTokens.surface,
+                                border: Border.all(color: ColorTokens.border),
+                                borderRadius: BorderRadius.circular(12),
                               ),
-                            ],
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('COBRADO (RECAUDO)', style: FontTokens.label.copyWith(fontSize: 8, color: ColorTokens.primary)),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    CurrencyUtils.format(totalCobrado),
+                                    style: FontTokens.bodyMedium.copyWith(color: ColorTokens.primary, fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
-                        ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: ColorTokens.surface,
+                                border: Border.all(color: ColorTokens.border),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('POR COBRAR (SALDO)', style: FontTokens.label.copyWith(fontSize: 8, color: ColorTokens.warning)),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    CurrencyUtils.format(totalPorCobrar),
+                                    style: FontTokens.bodyMedium.copyWith(color: ColorTokens.warning, fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: ColorTokens.surface,
+                                border: Border.all(color: ColorTokens.border),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('EN MORA', style: FontTokens.label.copyWith(fontSize: 8)),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '$morososCount cliente(s)',
+                                    style: FontTokens.bodyMedium.copyWith(
+                                      color: morososCount > 0 ? ColorTokens.error : ColorTokens.secondary,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: ColorTokens.surface,
-                            border: Border.all(color: ColorTokens.border),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('POR COBRAR (SALDO)', style: FontTokens.label.copyWith(fontSize: 8, color: ColorTokens.warning)),
-                              const SizedBox(height: 4),
-                              Text(
-                                CurrencyUtils.format(totalPorCobrar),
-                                style: FontTokens.bodyMedium.copyWith(color: ColorTokens.warning, fontWeight: FontWeight.bold),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: ColorTokens.surface,
-                            border: Border.all(color: ColorTokens.border),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('EN MORA', style: FontTokens.label.copyWith(fontSize: 8)),
-                              const SizedBox(height: 4),
-                              Text(
-                                '$morososCount cliente(s)',
-                                style: FontTokens.bodyMedium.copyWith(
-                                  color: morososCount > 0 ? ColorTokens.error : ColorTokens.secondary,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                      const SizedBox(height: 12),
+
+                      // Search Bar Input for Credits
+                      CustomTextField(
+                        label: '',
+                        controller: _searchCtrl,
+                        hint: 'Buscar cliente por nombre o documento…',
+                        prefixIcon: const Icon(Icons.search, size: 20, color: ColorTokens.textMuted),
+                        suffixIcon: _searchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 18, color: ColorTokens.textMuted),
+                                onPressed: () {
+                                  _searchCtrl.clear();
+                                  setState(() {
+                                    _searchQuery = '';
+                                  });
+                                },
+                              )
+                            : null,
+                        onChanged: (val) {
+                          setState(() {
+                            _searchQuery = val;
+                          });
+                        },
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                ),
+                const Divider(height: 1),
 
-                  // Search Bar Input for Credits
-                  CustomTextField(
-                    label: '',
-                    hint: 'Buscar cliente por nombre o documento…',
-                    prefixIcon: const Icon(Icons.search, size: 20, color: ColorTokens.textMuted),
-                    onChanged: (val) {
-                      setState(() {
-                        _searchQuery = val;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  const Divider(),
-                  const SizedBox(height: 12),
-
-                  // Lista de Créditos
-                  filteredActive.isEmpty
-                      ? Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 40),
-                          child: Center(
-                            child: Text(
-                              _searchQuery.isEmpty ? 'No hay créditos activos' : 'Sin resultados para la búsqueda',
-                              style: const TextStyle(color: ColorTokens.textMuted, fontWeight: FontWeight.w500),
+                // Lista de Créditos (Lazy-loaded para evitar congelamiento al buscar)
+                Expanded(
+                  child: filteredActive.isEmpty
+                      ? ListView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 60),
+                              child: Center(
+                                child: Text(
+                                  _searchQuery.isEmpty ? 'No hay créditos activos' : 'Sin resultados para la búsqueda',
+                                  style: const TextStyle(color: ColorTokens.textMuted, fontWeight: FontWeight.w500),
+                                ),
+                              ),
                             ),
-                          ),
+                          ],
                         )
                       : ListView.separated(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 90),
+                          physics: const AlwaysScrollableScrollPhysics(),
                           itemCount: filteredActive.length,
                           separatorBuilder: (context, idx) => const SizedBox(height: 10),
                           itemBuilder: (context, idx) {
@@ -270,9 +298,8 @@ class _CreditsScreenState extends ConsumerState<CreditsScreen> {
                             );
                           },
                         ),
-                  const SizedBox(height: 80),
-                ],
-              ),
+                ),
+              ],
             ),
           );
         },
@@ -441,13 +468,13 @@ class _NewCreditSheetState extends ConsumerState<_NewCreditSheet> {
         ? <Customer>[]
         : registeredCustomers.where((c) =>
             c.name.toLowerCase().contains(_customerQuery.toLowerCase()) ||
-            (c.documentId.isNotEmpty && c.documentId.contains(_customerQuery))).toList();
+            (c.documentId.isNotEmpty && c.documentId.contains(_customerQuery))).take(8).toList();
 
     final matchingProducts = _productQuery.trim().isEmpty
         ? <Product>[]
         : productsList.where((p) =>
             p.name.toLowerCase().contains(_productQuery.toLowerCase()) ||
-            p.sku.toLowerCase().contains(_productQuery.toLowerCase())).toList();
+            p.sku.toLowerCase().contains(_productQuery.toLowerCase())).take(8).toList();
 
     return Form(
       key: _formKey,
@@ -478,32 +505,37 @@ class _NewCreditSheetState extends ConsumerState<_NewCreditSheet> {
                   border: Border.all(color: ColorTokens.primary),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: matchingCustomers.length,
-                  separatorBuilder: (ctx, index) => const Divider(height: 1),
-                  itemBuilder: (ctx, idx) {
-                    final c = matchingCustomers[idx];
-                    final docInfo = c.documentId.isNotEmpty ? '${c.documentType}: ${c.documentId}' : 'Sin doc';
-                    final phoneInfo = c.phone.isNotEmpty ? 'Tel: ${c.phone}' : 'Sin tel';
-                    return ListTile(
-                      dense: true,
-                      title: Text(c.name, style: FontTokens.bodyMedium.copyWith(fontWeight: FontWeight.bold)),
-                      subtitle: Text('$docInfo · $phoneInfo', style: FontTokens.bodySmall),
-                      trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: ColorTokens.primary),
-                      onTap: () {
-                        setState(() {
-                          _nameCtrl.text = c.name;
-                          _phoneCtrl.text = c.phone;
-                          _addressCtrl.text = c.address;
-                          _docIdCtrl.text = c.documentId;
-                          _docType = c.documentType.isNotEmpty ? c.documentType : 'CC';
-                          _customerQuery = '';
-                          _showCustomerResults = false;
-                        });
-                      },
-                    );
-                  },
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (int idx = 0; idx < matchingCustomers.length; idx++) ...[
+                        if (idx > 0) const Divider(height: 1),
+                        () {
+                          final c = matchingCustomers[idx];
+                          final docInfo = c.documentId.isNotEmpty ? '${c.documentType}: ${c.documentId}' : 'Sin doc';
+                          final phoneInfo = c.phone.isNotEmpty ? 'Tel: ${c.phone}' : 'Sin tel';
+                          return ListTile(
+                            dense: true,
+                            title: Text(c.name, style: FontTokens.bodyMedium.copyWith(fontWeight: FontWeight.bold)),
+                            subtitle: Text('$docInfo · $phoneInfo', style: FontTokens.bodySmall),
+                            trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: ColorTokens.primary),
+                            onTap: () {
+                              setState(() {
+                                _nameCtrl.text = c.name;
+                                _phoneCtrl.text = c.phone;
+                                _addressCtrl.text = c.address;
+                                _docIdCtrl.text = c.documentId;
+                                _docType = c.documentType.isNotEmpty ? c.documentType : 'CC';
+                                _customerQuery = '';
+                                _showCustomerResults = false;
+                              });
+                            },
+                          );
+                        }(),
+                      ],
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -634,28 +666,33 @@ class _NewCreditSheetState extends ConsumerState<_NewCreditSheet> {
                   border: Border.all(color: ColorTokens.primary),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: matchingProducts.length,
-                  separatorBuilder: (ctx, index) => const Divider(height: 1),
-                  itemBuilder: (ctx, idx) {
-                    final p = matchingProducts[idx];
-                    return ListTile(
-                      dense: true,
-                      title: Text(p.name, style: FontTokens.bodyMedium.copyWith(fontWeight: FontWeight.bold)),
-                      subtitle: Text('SKU: ${p.sku} · Stock: ${p.stock} uds', style: FontTokens.bodySmall),
-                      trailing: Text(currencyFmt.format(p.price), style: FontTokens.moneySmall.copyWith(color: ColorTokens.primary, fontWeight: FontWeight.bold)),
-                      onTap: () {
-                        setState(() {
-                          _productsCtrl.text = p.name;
-                          _totalSaleCtrl.text = p.price.toStringAsFixed(0);
-                          _matchedProduct = p;
-                          _productQuery = '';
-                          _showProductResults = false;
-                        });
-                      },
-                    );
-                  },
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (int idx = 0; idx < matchingProducts.length; idx++) ...[
+                        if (idx > 0) const Divider(height: 1),
+                        () {
+                          final p = matchingProducts[idx];
+                          return ListTile(
+                            dense: true,
+                            title: Text(p.name, style: FontTokens.bodyMedium.copyWith(fontWeight: FontWeight.bold)),
+                            subtitle: Text('SKU: ${p.sku} · Stock: ${p.stock} uds', style: FontTokens.bodySmall),
+                            trailing: Text(currencyFmt.format(p.price), style: FontTokens.moneySmall.copyWith(color: ColorTokens.primary, fontWeight: FontWeight.bold)),
+                            onTap: () {
+                              setState(() {
+                                _productsCtrl.text = p.name;
+                                _totalSaleCtrl.text = p.price.toStringAsFixed(0);
+                                _matchedProduct = p;
+                                _productQuery = '';
+                                _showProductResults = false;
+                              });
+                            },
+                          );
+                        }(),
+                      ],
+                    ],
+                  ),
                 ),
               ),
             ],

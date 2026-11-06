@@ -106,18 +106,11 @@ function creditStatus(c: Credit): 'al_dia' | 'mora' | 'finalizado' {
   if (c.installments.some(i => instStatus(i) === 'vencido')) return 'mora'
   return 'al_dia'
 }
-function distributePaidAmount(installments: CreditInstallment[], totalPaid: number): CreditInstallment[] {
-  let remaining = totalPaid
-  return installments.map(inst => {
-    const quotaVal = inst.quotaValue
-    const paidForThis = Math.min(quotaVal, Math.max(0, remaining))
-    remaining -= paidForThis
-    return {
-      ...inst,
-      paidAmount: paidForThis,
-      paidDate: paidForThis > 0 ? (inst.paidDate || new Date()) : null
-    }
-  })
+function cleanAbonoNotes(rawNotes?: string): string {
+  if (!rawNotes) return ''
+  let cleaned = rawNotes.replace(/Abono:\s*\$[0-9.,]+\s*/gi, '')
+  cleaned = cleaned.replace(/^Abono previo registrado$/i, '')
+  return cleaned.trim()
 }
 function pendingBalance(c: Credit) { return Math.max(0, c.totalSale - totalPaid(c)) }
 function progressPct(c: Credit) {
@@ -2183,7 +2176,7 @@ function CreditDetail({
                       <td style={{ padding: '9px 10px', fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#888', borderBottom: '1px solid #151515', whiteSpace: 'nowrap' }}>{fmtDate(ensureDate(pmt.paymentDate))}</td>
                       <td style={{ padding: '9px 10px', fontFamily: 'JetBrains Mono, monospace', fontSize: 12, fontWeight: 700, color: '#00e676', borderBottom: '1px solid #151515', whiteSpace: 'nowrap' }}>{fmt(pmt.amount)}</td>
                       <td style={{ padding: '9px 10px', fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#448aff', borderBottom: '1px solid #151515', textTransform: 'capitalize', whiteSpace: 'nowrap' }}>{pmt.paymentMethod}</td>
-                      <td style={{ padding: '9px 10px', fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#777', borderBottom: '1px solid #151515' }}>{pmt.notes || '—'}</td>
+                      <td style={{ padding: '9px 10px', fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: '#777', borderBottom: '1px solid #151515' }}>{cleanAbonoNotes(pmt.notes) || '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -2230,17 +2223,20 @@ function CreditDetail({
 
 function RegisterPaymentModal({ credit, onSave, onClose }: { credit: Credit; onSave: (c: Credit) => void; onClose: () => void }) {
   const pendingInsts = credit.installments.filter(i => instStatus(i) !== 'pagado')
-  const initialIdx = credit.installments.findIndex(i => instStatus(i) !== 'pagado')
+  const hasUnpaidInsts = pendingInsts.length > 0
+  const firstUnpaidIdx = credit.installments.findIndex(i => instStatus(i) !== 'pagado')
+  const initialIdx = firstUnpaidIdx >= 0 ? firstUnpaidIdx : Math.max(0, credit.installments.length - 1)
   const [selectedIdx, setSelectedIdx] = useState(initialIdx)
-  const initialPendingAmount = initialIdx >= 0
+  const initialPendingQuota = initialIdx >= 0 && credit.installments[initialIdx]
     ? Math.max(0, credit.installments[initialIdx].quotaValue - credit.installments[initialIdx].paidAmount)
     : 0
-  const [amount, setAmount] = useState(initialIdx >= 0 ? initialPendingAmount.toString() : '')
+  const initialPendingAmount = initialPendingQuota > 0 ? initialPendingQuota : pendingBalance(credit)
+  const [amount, setAmount] = useState(initialPendingAmount > 0 ? initialPendingAmount.toString() : '')
   const [method, setMethod] = useState<'efectivo' | 'tarjeta' | 'transferencia'>('efectivo')
   const [notes, setNotes] = useState('')
   const pmColor = (m: string) => m === 'efectivo' ? '#00e676' : m === 'tarjeta' ? '#448aff' : '#ff9800'
 
-  if (pendingInsts.length === 0) {
+  if (pendingBalance(credit) <= 0 || credit.installments.length === 0) {
     return (
       <div className="fade-in" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
         <div style={{ background: '#0e0e0e', border: '1px solid #222', borderRadius: 16, padding: 24, textAlign: 'center' }}>
@@ -2266,8 +2262,17 @@ function RegisterPaymentModal({ credit, onSave, onClose }: { credit: Credit; onS
     }
 
     const updatedPayments = [...(credit.payments || []), newPayment]
-    const newTotalPaid = updatedPayments.reduce((s, p) => s + p.amount, 0)
-    const updatedInstallments = distributePaidAmount(credit.installments, newTotalPaid)
+    const targetIdx = selectedIdx >= 0 && selectedIdx < credit.installments.length ? selectedIdx : 0
+    const updatedInstallments = credit.installments.map((inst, idx) => {
+      if (idx !== targetIdx) return inst
+      return {
+        ...inst,
+        paidAmount: inst.paidAmount + paidVal,
+        paidDate: newPayment.paymentDate,
+        paymentMethod: method,
+        notes: newPayment.notes || inst.notes
+      }
+    })
 
     const updated: Credit = {
       ...credit,
@@ -2298,16 +2303,17 @@ function RegisterPaymentModal({ credit, onSave, onClose }: { credit: Credit; onS
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {credit.installments.map((inst, i) => {
               const s = instStatus(inst)
-              if (s === 'pagado') return null
+              if (hasUnpaidInsts && s === 'pagado') return null
               const quotaRemaining = Math.max(0, inst.quotaValue - inst.paidAmount)
+              const suggestedAmt = quotaRemaining > 0 ? quotaRemaining : totalPending
               return (
-                <button key={i} onClick={() => { setSelectedIdx(i); setAmount(quotaRemaining.toString()) }} style={{ background: selectedIdx === i ? 'rgba(68,138,255,0.12)' : '#141414', border: `1px solid ${selectedIdx === i ? '#448aff' : '#222'}`, borderRadius: 10, padding: '12px 14px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#f0f0f0', textAlign: 'left' }}>
+                <button key={i} onClick={() => { setSelectedIdx(i); setAmount(suggestedAmt.toString()) }} style={{ background: selectedIdx === i ? 'rgba(68,138,255,0.12)' : '#141414', border: `1px solid ${selectedIdx === i ? '#448aff' : '#222'}`, borderRadius: 10, padding: '12px 14px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#f0f0f0', textAlign: 'left' }}>
                   <div>
                     <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, fontWeight: 600 }}>Cuota {inst.quotaNumber}</div>
                     <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: s === 'vencido' ? '#ff3d3d' : '#555', marginTop: 2 }}>{fmtDate(inst.dueDate)}</div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, fontWeight: 600, color: s === 'vencido' ? '#ff3d3d' : '#f0f0f0' }}>{fmt(quotaRemaining)} pend.</div>
+                    <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, fontWeight: 600, color: s === 'vencido' ? '#ff3d3d' : '#f0f0f0' }}>{fmt(suggestedAmt)} pend.</div>
                     <InstStatusBadge status={s} />
                   </div>
                 </button>
